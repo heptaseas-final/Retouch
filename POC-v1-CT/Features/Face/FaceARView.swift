@@ -45,8 +45,6 @@ struct FaceARView: UIViewRepresentable {
         uiView.session.pause()
     }
 
-    // MARK: - Coordinator
-
     final class Coordinator: NSObject, ARSCNViewDelegate {
         var shape: FaceShape = .oval
         var step: FaceARStep = .contour
