@@ -1,4 +1,4 @@
-name: POC-v1-CT
+name: HiFi_v1
 
 options:
   bundleIdPrefix: bsd.iosda
@@ -15,14 +15,14 @@ settings:
     LOCALIZATION_PREFERS_STRING_CATALOGS: YES
 
 targets:
-  POC-v1-CT:
+  HiFi_v1:
     type: application
     platform: iOS
     sources:
-      - path: POC-v1-CT
+      - path: HiFi_v1
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: bsd.iosda.POC-v1-CT
+        PRODUCT_BUNDLE_IDENTIFIER: bsd.iosda.HiFi-v1
         PRODUCT_NAME: $(TARGET_NAME)
         MARKETING_VERSION: 1.0
         CURRENT_PROJECT_VERSION: 1
@@ -35,8 +35,6 @@ targets:
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         INFOPLIST_KEY_NSCameraUsageDescription: "Camera is used to track your face for the AR makeup tutorial."
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Microphone is used to listen to your 'next' and 'previous' voice commands."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Speech recognition is used to understand your voice commands."
@@ -55,11 +53,36 @@ targets:
         SWIFT_EMIT_LOC_STRINGS: YES
         STRING_CATALOG_GENERATE_SYMBOLS: YES
 
+  HiFi_v1Tests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [HiFi_v1Tests]
+    dependencies:
+      - target: HiFi_v1
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: bsd.iosda.HiFi-v1Tests
+        GENERATE_INFOPLIST_FILE: YES
+
+  HiFi_v1UITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [HiFi_v1UITests]
+    dependencies:
+      - target: HiFi_v1
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: bsd.iosda.HiFi-v1UITests
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
-  POC-v1-CT:
+  HiFi_v1:
     build:
       targets:
-        POC-v1-CT: all
+        HiFi_v1: all
+    test:
+      config: Debug
+      targets: [HiFi_v1Tests, HiFi_v1UITests]
     run:
       config: Debug
     archive:
