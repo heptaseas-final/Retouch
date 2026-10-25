@@ -10,6 +10,7 @@ import SwiftUI
 enum MakeupRoute: Hashable {
     case eyeMakeup
     case contour
+    case autoLightDebug
 }
 
 struct ContentView: View {
@@ -27,21 +28,25 @@ struct ContentView: View {
                     path.append(MakeupRoute.contour)
                 }
                 .buttonStyle(.borderedProminent)
+
+                Button("Auto Light Debug") {
+                    path.append(MakeupRoute.autoLightDebug)
+                }
+                .buttonStyle(.bordered)
             }
             .navigationTitle("Home")
             .navigationDestination(for: MakeupRoute.self) { route in
                 switch route {
+                // TODO: replace with the HiFi eye makeup and contour flows
                 case .eyeMakeup:
-                    EyeMakeupFlowView(onFinish: goHome)
+                    ContentUnavailableView("Eye Makeup", systemImage: "eye", description: Text("Coming soon"))
                 case .contour:
-                    ContourFlowView(onFinish: goHome)
+                    ContentUnavailableView("Face Makeup", systemImage: "face.smiling", description: Text("Coming soon"))
+                case .autoLightDebug:
+                    DebugMirrorView()
                 }
             }
         }
-    }
-
-    private func goHome() {
-        path = NavigationPath()
     }
 }
 
