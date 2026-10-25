@@ -9,6 +9,7 @@ import AVFoundation
 
 nonisolated protocol CameraServicing: AnyObject, Sendable {
     var session: AVCaptureSession { get }
+    var frameHandler: (@Sendable (CVPixelBuffer) -> Void)? { get set }
     func permissionStatus() -> CameraPermissionStatus
     func requestPermission() async -> Bool
     func start()

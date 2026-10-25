@@ -18,6 +18,15 @@ enum ZoomPart: CaseIterable, Identifiable {
         case .lips: "mouth.fill"
         }
     }
+    
+    var target: ZoomTarget {
+        switch self {
+        case .face: .fullFace
+        case .leftEye: .leftEye
+        case .rightEye: .rightEye
+        case .lips: .lips
+        }
+    }
 
     var letter: String? {
         switch self {

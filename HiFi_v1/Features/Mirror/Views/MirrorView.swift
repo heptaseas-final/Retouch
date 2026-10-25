@@ -17,15 +17,14 @@ struct MirrorView: View {
             if viewModel.permission == .denied {
                 CameraPermissionDeniedView(onOpenSettings: viewModel.openSettings)
             } else {
-                CameraPreview(session: viewModel.session)
-                    .ignoresSafeArea()
+                ZoomableCameraPreview(viewModel: viewModel)
                 VStack(spacing: 12) {
                     Spacer()
                     if viewModel.isZoomBarVisible {
                         ZoomPartBar(selected: viewModel.selectedPart, onSelect: viewModel.select)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
-                    ActionButtonRow(isZoomBarVisible: viewModel.isZoomBarVisible, onLighting: viewModel.showLighting, onZoom: viewModel.toggleZoomBar, onMic: {})
+                    ActionButtonRow(isZoomBarVisible: viewModel.isZoomBarVisible, onLighting: viewModel.showLighting, onZoom: viewModel.toggleGesture, onMic: {})
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 16)
