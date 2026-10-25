@@ -13,43 +13,56 @@ import Observation
 @MainActor
 @Observable
 final class MirrorViewModel {
-    private(set) var permission: CameraPermissionStatus
-    private let camera: CameraServicing
+    // [FITUR] kamera sekarang dimiliki AutoLightDetector (menggantikan CameraServicing),
+    // karena dua AVCaptureSession tidak bisa jalan bareng di front camera.
+    let detector: AutoLightDetector
+    let lighting: LightingViewModel
+
     private(set) var isZoomBarVisible = false
     private(set) var selectedPart: ZoomPart = .face
-
-    var session: AVCaptureSession { camera.session }
-    
-    let lighting = LightingViewModel()
     var isLightingSheetPresented = false
-    
+
+    /// [FITUR] dipetakan dari cameraState detector, supaya MirrorView tetap pakai `permission`.
+    var permission: CameraPermissionStatus {
+        detector.cameraState == .permissionDenied ? .denied : .granted
+    }
+
+    /// [FITUR] untuk overlay .failed / .reconnecting di MirrorView
+    var cameraState: CameraState { detector.cameraState }
+    func retryCamera() { detector.retryCameraSetup() }
+
+    /// [FITUR] lux ruangan (cahaya layar sudah dikeluarkan), untuk label di pojok kanan atas
+    var luxText: String {
+        detector.roomLux.map { "\(Int($0.rounded())) lux" } ?? "– lux"
+    }
+
     func showLighting() {
         print("bolt tapped")
         isLightingSheetPresented = true
     }
-    
+
     func toggleZoomBar() { isZoomBarVisible.toggle() }
     func select(_ part: ZoomPart) { selectedPart = part }
 
-    init(camera: CameraServicing = CameraService()) {
-        self.camera = camera
-        self.permission = camera.permissionStatus()
+    init() {
+        let detector = AutoLightDetector()
+        self.detector = detector
+        self.lighting = LightingViewModel(detector: detector)
     }
 
     func start() async {
-        if permission == .notDetermined {
-            permission = await camera.requestPermission() ? .granted : .denied
-        }
-        if permission == .granted { camera.start() }
+        detector.start()
     }
 
-    func stop() { camera.stop() }
+    func stop() {
+        // [FITUR] setiap app keluar/ditutup, pengaturan manual dibuang: buka lagi selalu mulai dari auto
+        lighting.setAuto(true)
+        detector.stop()
+    }
 
     /// dipanggil saat app active lagi, semisal setelah dari Settings
     func refresh() {
-        guard permission != .notDetermined else { return }
-        permission = camera.permissionStatus()
-        if permission == .granted { camera.start() }
+        detector.start()
     }
 
     func openSettings() {

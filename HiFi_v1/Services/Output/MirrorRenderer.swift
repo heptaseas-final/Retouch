@@ -21,6 +21,12 @@ final class MirrorRenderer {
         set { lock.withLock { _targetLevel = min(max(newValue, 0), 1) } }
     }
 
+    /// [FITUR] Colour of the edge light (white by default). Thread-safe.
+    var flashColor: CIColor {
+        get { lock.withLock { _flashColor } }
+        set { lock.withLock { _flashColor = newValue } }
+    }
+
     /// Opacity of the white at level 1.
     var maxFlashAlpha = 1.0
     /// Per-frame easing of the edge light: quick on, like a camera flash; gentler off.
@@ -45,6 +51,7 @@ final class MirrorRenderer {
 
     private let lock = NSLock()
     private var _targetLevel = 0.0
+    private var _flashColor = CIColor(red: 1, green: 1, blue: 1)
     private var layer: CAMetalLayer?
     private var drawableSize: CGSize = .zero
     // Owned by the frame queue.
@@ -78,7 +85,7 @@ final class MirrorRenderer {
         frameCount += 1
         if frameCount % faceDetectionInterval == 0 { faceTracker.submit(frame) }
 
-        let (layer, size, target) = lock.withLock { (self.layer, drawableSize, _targetLevel) }
+        let (layer, size, target, color) = lock.withLock { (self.layer, drawableSize, _targetLevel, _flashColor) }
         guard let layer, let queue, let context, size.width > 0,
               let drawable = layer.nextDrawable(),
               let commandBuffer = queue.makeCommandBuffer() else { return }
@@ -94,7 +101,7 @@ final class MirrorRenderer {
         if flash > 0 {
             let area = updateClearArea(face: faceTracker.face.map { Self.displayRect($0, in: frame.extent, fill) },
                                        size: size)
-            image = screenFlash(size: size, clearArea: area, alpha: flash).composited(over: image)
+            image = screenFlash(size: size, clearArea: area, alpha: flash, color: color).composited(over: image)
         } else {
             clearArea = nil
         }
@@ -141,7 +148,7 @@ final class MirrorRenderer {
     }
 
     /// White light covering the screen except a soft-edged oval over the face.
-    private func screenFlash(size: CGSize, clearArea: CGRect, alpha: Double) -> CIImage {
+    private func screenFlash(size: CGSize, clearArea: CGRect, alpha: Double, color: CIColor) -> CIImage {
         // A circular gradient, clear inside `radius`, white past the feather,
         // then stretched into the oval.
         let radius = clearArea.width / 2
@@ -149,8 +156,8 @@ final class MirrorRenderer {
         gradient.center = .zero
         gradient.radius0 = Float(radius)
         gradient.radius1 = Float(radius * (1 + flashFeather))
-        gradient.color0 = CIColor(red: 1, green: 1, blue: 1, alpha: 0)
-        gradient.color1 = CIColor(red: 1, green: 1, blue: 1, alpha: alpha)
+        gradient.color0 = CIColor(red: color.red, green: color.green, blue: color.blue, alpha: 0)
+        gradient.color1 = CIColor(red: color.red, green: color.green, blue: color.blue, alpha: alpha)
         let stretch = CGAffineTransform(scaleX: 1, y: clearArea.height / clearArea.width)
             .concatenating(CGAffineTransform(translationX: clearArea.midX, y: clearArea.midY))
         return (gradient.outputImage ?? CIImage.empty())

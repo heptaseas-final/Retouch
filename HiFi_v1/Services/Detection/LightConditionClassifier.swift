@@ -10,7 +10,9 @@ import Foundation
 ///   2. Debounce: a new class must hold for `dwellTime` before it is committed.
 struct LightConditionClassifier {
     struct Thresholds {
-        var darkBelow = 300.0
+        // [FITUR] diturunkan dari 300: di ruangan yang cukup terang edge light tidak boleh menyala.
+        // Tuning dengan HUD "Lux" di DebugMirrorView: isi sedikit di bawah angka ruangan terang.
+        var darkBelow = 10.0
         var brightAbove = 750.0
         /// Fraction past the boundary needed to leave a class (0.1 → leave dark above 330 lux).
         var hysteresis = 0.1

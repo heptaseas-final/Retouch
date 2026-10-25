@@ -1,3 +1,4 @@
+import CoreImage
 import Observation
 import UIKit
 
@@ -31,6 +32,8 @@ final class AutoLightDetector {
     private(set) var roomKelvin: Double?
     /// Strength of dim-light compensation, 0 (off) to 1.
     private(set) var dimLightLevel: Double = 0
+    /// [FITUR] True only while the room is really dark: brightness and edge light are then at full.
+    private(set) var isLowLight = false
     private(set) var isFaceVisible = false
     /// Screen brightness as applied, rounded to whole percent so the UI redraws
     /// only when a label would change.
@@ -38,6 +41,8 @@ final class AutoLightDetector {
     /// Non-nil while the user has taken over that dimension (PRD Epic 5).
     private(set) var manualBrightness: Double?
     private(set) var manualColor: ManualColorChoice?
+    /// [FITUR] Non-nil while the user has picked an edge-light colour; nil = white (auto).
+    private(set) var filterColor: ManualColorChoice?
 
     /// Colour temperature the face is shown as if lit by: Natural unless the user picked otherwise.
     var targetColorKelvin: Double { (manualColor ?? .natural).appearanceKelvin }
@@ -138,7 +143,8 @@ final class AutoLightDetector {
         UIApplication.shared.open(url)
     }
 
-    /// Fixes screen brightness at `level` (0…1); brightness and edge light stop adapting.
+    /// Fixes the screen brightness at `level` (0…1), as on the phone's own scale.
+    /// The edge light is on only when `level` is full. Stops adapting.
     func setManualBrightness(_ level: Double) {
         manualBrightness = min(max(level, 0), 1)
         applyBrightness()
@@ -152,10 +158,18 @@ final class AutoLightDetector {
         applyManualColor()
     }
 
+    /// [FITUR] Sets the colour of the edge light (white / warm yellow / cool blue).
+    func setFilterColor(_ choice: ManualColorChoice) {
+        filterColor = choice
+        renderer.flashColor = Self.edgeLightColor(for: choice)
+    }
+
     /// Clears both overrides and adapts again from the current room condition.
     func resetToAuto() {
         manualBrightness = nil
         manualColor = nil
+        filterColor = nil
+        renderer.flashColor = Self.edgeLightColor(for: .natural)
         manualColorBase = nil
         applyBrightness()
         restartColorAdaptation()
@@ -213,6 +227,7 @@ final class AutoLightDetector {
         measuredLux = nil
         isFaceVisible = false
         dimLightLevel = 0
+        isLowLight = false
         renderer.targetLevel = 0
     }
 
@@ -245,6 +260,10 @@ final class AutoLightDetector {
 
         if compensation.update(lux: lux, isDark: classifier.condition == .dark) {
             dimLightLevel = compensation.level
+        }
+        // [FITUR] brightness/edge light only change when low light starts or ends.
+        if compensation.isOn != isLowLight {
+            isLowLight = compensation.isOn
             applyBrightness()
         }
         updateColor(sample, roomLux: room)
@@ -255,12 +274,15 @@ final class AutoLightDetector {
     private func applyBrightness() {
         guard isAppActive else { return }
         if let manualBrightness {
+            // [FITUR] Manual: the slider is the real screen brightness (0…1).
             brightness.set(manualBrightness)
-            renderer.targetLevel = 0
+            // [FITUR] Edge light only at full brightness, in any colour.
+            renderer.targetLevel = manualBrightness >= 0.98 ? 1 : 0
         } else {
-            let baseline = Double(brightness.baseline)
-            brightness.ramp(to: baseline + dimLightLevel * (1 - baseline))
-            renderer.targetLevel = dimLightLevel
+            // [FITUR] Normal light: user's brightness, no edge light.
+            // Low light: full brightness and full edge light.
+            brightness.ramp(to: isLowLight ? 1 : brightness.baseline)
+            renderer.targetLevel = isLowLight ? 1 : 0
         }
     }
 
@@ -301,6 +323,15 @@ final class AutoLightDetector {
     private func restartColorAdaptation() {
         colorTracker.reset()
         camera.useAutoWhiteBalance()
+    }
+
+    /// [FITUR] Same colours as the swatches in the lighting sheet.
+    private static func edgeLightColor(for choice: ManualColorChoice) -> CIColor {
+        switch choice {
+        case .natural: CIColor(red: 1, green: 1, blue: 1)
+        case .warm: CIColor(red: 1, green: 0.925, blue: 0.733)   // #FFECBB
+        case .cool: CIColor(red: 0.843, green: 0.973, blue: 1)   // #D7F8FF
+        }
     }
 
     private static func roundedPercent(_ value: CGFloat) -> Double {

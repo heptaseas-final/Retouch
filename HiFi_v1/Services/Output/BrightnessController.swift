@@ -22,6 +22,8 @@ final class BrightnessController {
     private(set) var target: CGFloat
     private(set) var current: CGFloat
     private var written: CGFloat
+    /// [FITUR] Last value we wrote that differs from the baseline (our boost).
+    private var lastBoost: CGFloat?
     private var displayLink: CADisplayLink?
     private var lastTick: CFTimeInterval = 0
 
@@ -42,7 +44,11 @@ final class BrightnessController {
     func captureBaseline() {
         stopDisplayLink()
         let value = Self.screen?.brightness ?? baseline
-        if abs(value - written) > 0.01 { baseline = value }
+        // [FITUR] A restore written while the app was leaving may not have been applied by iOS,
+        // so `written` is then the baseline while the screen still shows our last boost.
+        // Treat that value as ours too, otherwise the boost becomes the new baseline.
+        let isOurs = abs(value - written) <= 0.01 || lastBoost.map { abs(value - $0) <= 0.01 } == true
+        if !isOurs { baseline = value }
         target = baseline
         apply(baseline)
     }
@@ -69,6 +75,7 @@ final class BrightnessController {
     private func apply(_ value: CGFloat) {
         current = value
         written = value
+        if abs(value - baseline) > 0.01 { lastBoost = value }   // [FITUR]
         Self.screen?.brightness = value
         onChange?(value)
     }
