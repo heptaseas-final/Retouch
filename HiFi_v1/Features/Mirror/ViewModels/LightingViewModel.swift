@@ -11,15 +11,18 @@ import Observation
 @MainActor
 @Observable
 final class LightingViewModel {
-    static let defaultBrightness = 1.0
+    static let defaultBrightness = 0.0
 
     private(set) var isAutoBrightness = true
     private(set) var selectedColor: LightColor = .white
-    private(set) var brightness = LightingViewModel.defaultBrightness  // 0...3, titik berhenti
+    private(set) var brightness = LightingViewModel.defaultBrightness  // 0...1, titik berhenti
 
     func setAuto(_ isOn: Bool) {
         isAutoBrightness = isOn
-        if isOn { brightness = Self.defaultBrightness }
+        if isOn {
+            brightness = Self.defaultBrightness
+            selectedColor = .white
+        }
     }
 
     func setBrightness(_ value: Double) {
@@ -29,5 +32,6 @@ final class LightingViewModel {
 
     func select(_ color: LightColor) {
         selectedColor = color
+        isAutoBrightness = false
     }
 }

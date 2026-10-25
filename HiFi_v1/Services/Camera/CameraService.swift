@@ -5,10 +5,9 @@
 //  Created by Davin P on 25/10/26.
 //
 
-
 import AVFoundation
 
-final class CameraService: CameraServicing {
+nonisolated final class CameraService: CameraServicing, @unchecked Sendable {
     let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "camera.session")
     private var isConfigured = false

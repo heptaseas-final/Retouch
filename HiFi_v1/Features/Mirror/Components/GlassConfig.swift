@@ -1,7 +1,11 @@
-enum GlassConfig {
-    enum Mode { case automatic, material }
-    enum Variant { case white, transparent }
+//
+//  GlassConfig.swift
+//  HiFi_v1
+//
+//  Created by Davin P on 25/10/26.
+//
 
-    static let mode: Mode = .automatic
+enum GlassConfig {
+    enum Variant { case white, transparent }
     static let variant: Variant = .white
 }

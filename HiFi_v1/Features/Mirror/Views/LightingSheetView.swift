@@ -33,6 +33,7 @@ struct LightingSheetView: View {
                 }
             }
             .frame(maxWidth: .infinity)
+            
             Divider()
             sectionTitle("Adjust Brightness")
             BrightnessSlider(value: lighting.brightness, onChange: lighting.setBrightness)

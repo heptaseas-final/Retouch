@@ -3,36 +3,21 @@
 //  HiFi_v1
 //
 //  Created by Davin P on 25/10/26.
-//
-
-
+//g
 import SwiftUI
 
 struct GlassStyleModifier<S: Shape>: ViewModifier {
     let shape: S
 
-    @ViewBuilder
     func body(content: Content) -> some View {
-        if #available(iOS 26, *), GlassConfig.mode == .automatic {
-            content.glassEffect(liquidGlass, in: shape)
-        } else {
-            content
-                .background(shape.fill(materialTint))
-                .background(shape.fill(.ultraThinMaterial))
-                .overlay(shape.stroke(.white.opacity(0.4), lineWidth: 1))
-        }
+        content.glassEffect(glass, in: shape)
     }
 
-    @available(iOS 26, *)
-    private var liquidGlass: Glass {
+    private var glass: Glass {
         switch GlassConfig.variant {
         case .white: .regular.tint(.white.opacity(0.5))
-        case .transparent: .regular
+        case .transparent: .clear
         }
-    }
-
-    private var materialTint: Color {
-        GlassConfig.variant == .white ? .white.opacity(0.5) : .clear
     }
 }
 
