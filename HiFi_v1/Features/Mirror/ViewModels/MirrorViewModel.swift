@@ -18,8 +18,15 @@ final class MirrorViewModel {
     private(set) var isZoomBarVisible = false
     private(set) var selectedPart: ZoomPart = .face
 
-    var isZoomActive: Bool { selectedPart != .face }
     var session: AVCaptureSession { camera.session }
+    
+    let lighting = LightingViewModel()
+    var isLightingSheetPresented = false
+    
+    func showLighting() {
+        print("bolt tapped")
+        isLightingSheetPresented = true
+    }
     
     func toggleZoomBar() { isZoomBarVisible.toggle() }
     func select(_ part: ZoomPart) { selectedPart = part }

@@ -4,8 +4,6 @@
 //
 //  Created by Davin P on 25/10/26.
 //
-
-
 import SwiftUI
 
 struct GlassCircleButton: View {
@@ -16,7 +14,7 @@ struct GlassCircleButton: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.title3.weight(.medium))
-                .foregroundStyle(.primary)
+                .foregroundStyle(.black)
                 .frame(width: 44, height: 44)
                 .glassStyle(in: Circle())
         }

@@ -3,7 +3,7 @@ name: HiFi_v1
 options:
   bundleIdPrefix: bsd.iosda
   deploymentTarget:
-    iOS: "18.6"
+    iOS: "26.6"
   developmentLanguage: en
   createIntermediateGroups: true
 

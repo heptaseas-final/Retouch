@@ -1,7 +1,13 @@
+//
+//  ActionButtonRow.swift
+//  HiFi_v1
+//
+//  Created by Davin P on 25/10/26.
+//
 import SwiftUI
 
 struct ActionButtonRow: View {
-    let isZoomActive: Bool
+    let isZoomBarVisible: Bool
     let onLighting: () -> Void
     let onZoom: () -> Void
     let onMic: () -> Void
@@ -10,9 +16,9 @@ struct ActionButtonRow: View {
         HStack(spacing: 12) {
             GlassIconButton(systemName: "bolt.fill", action: onLighting)
             GlassIconButton(systemName: "arrow.up.left.and.down.right.magnifyingglass",
-                            color: isZoomActive ? .appMagenta : .appInactive,
+                            color: isZoomBarVisible ? .appInactive : .appMagenta,
                             action: onZoom)
-            GlassIconButton(systemName: "mic", action: onMic)
+            GlassIconButton(systemName: "microphone.fill", action: onMic)
         }
     }
 }

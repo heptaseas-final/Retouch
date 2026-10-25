@@ -5,10 +5,9 @@
 //  Created by Davin P on 25/10/26.
 //
 
-
 import AVFoundation
 
-protocol CameraServicing: AnyObject {
+nonisolated protocol CameraServicing: AnyObject, Sendable {
     var session: AVCaptureSession { get }
     func permissionStatus() -> CameraPermissionStatus
     func requestPermission() async -> Bool
