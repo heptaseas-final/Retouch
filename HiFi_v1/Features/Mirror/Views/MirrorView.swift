@@ -20,7 +20,7 @@ struct MirrorView: View {
                 ZoomableCameraPreview(viewModel: viewModel)
                 cameraStateOverlay                          
                 luxLabel
-                if GestureDebug.isEnabled {
+                if GestureDebug.isEnabledGestureDebug {
                     GestureDebugOverlay(viewModel: viewModel)
                     GestureDebugDots(viewModel: viewModel)
                 }

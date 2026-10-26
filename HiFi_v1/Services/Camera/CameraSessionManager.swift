@@ -22,7 +22,7 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
     var onFrame: ((CVPixelBuffer) -> Void)?
     var onStateChange: ((CameraState) -> Void)?
     var sampleInterval: CFTimeInterval = 0.1
-    var frameRate: Int32 = 240
+    var frameRate: Int32 = 60
     var whiteBalanceGlide: Double = 0.35
     var maxRestartAttempts = 3
     var preferredStabilization: AVCaptureVideoStabilizationMode = .cinematicExtendedEnhanced

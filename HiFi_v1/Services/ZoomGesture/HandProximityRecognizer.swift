@@ -107,7 +107,8 @@ nonisolated struct HandProximityRecognizer {
         }
         if wantsSwitch, let b = best {
             if switchPending?.target != b.target { switchPending = (b.target, now) }
-            if let p = switchPending, now.timeIntervalSince(p.since) >= switchHold {
+            let bothEyes = (cur == .leftEye || cur == .rightEye) && (b.target == .leftEye || b.target == .rightEye)
+            if let p = switchPending, now.timeIntervalSince(p.since) >= (bothEyes ? 0 : switchHold) {
                 current = b.target
                 holdVotes = [true]
                 switchPending = nil

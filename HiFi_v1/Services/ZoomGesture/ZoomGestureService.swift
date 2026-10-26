@@ -196,10 +196,9 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         }
     }
 
-    /// Dikirim ±10 kali per detik, hanya kalau GestureDebug.isEnabled
     private func sendDebug(target: ZoomTarget, tip: CGPoint?, grip: CGPoint?, points: FacePoints,
                            scan: HandScan, face: FaceObservation?, handFps: Int, now: Date) {
-        guard GestureDebug.isEnabled, let onDebugInfo,
+        guard GestureDebug.isEnabledGestureDebug, let onDebugInfo,
               now.timeIntervalSince(lastDebugSent) >= 0.1 else { return }
         lastDebugSent = now
         let H = viewSize.height
