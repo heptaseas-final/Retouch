@@ -4,16 +4,16 @@
 //
 //  Created by Davin P on 25/10/26.
 //
-
 import SwiftUI
 
+/// Menghaluskan skala dan geser di 60 fps. Semua state hanya disentuh di main thread.
 nonisolated final class ZoomAnimator: NSObject, @unchecked Sendable {
     var onChange: (@Sendable (ZoomState) -> Void)?
 
     private let zoomInTau: CGFloat = 0.14
     private let zoomOutTau: CGFloat = 0.20
     private let panTau: CGFloat = 0.12
-    private let safeMargin: CGFloat = 0.25   // titik fokus dijaga minimal 25% dari tepi layar
+    private let centerTolerance: CGFloat = 0.015
 
     private var viewSize: CGSize = .zero
     private var goalScale: CGFloat = 1
@@ -52,9 +52,10 @@ nonisolated final class ZoomAnimator: NSObject, @unchecked Sendable {
         let tau = goalScale > currentScale ? zoomInTau : zoomOutTau
         currentScale += (goalScale - currentScale) * (1 - exp(-dt / tau))
 
-        // Geser seperlunya: hanya sejauh yang dibutuhkan supaya titik fokus tetap di zona aman
+        // Batas geser untuk skala SAAT INI: lebih dari ini, tepi layar kelihatan hitam
         let maxX = (currentScale - 1) * size.width / 2
         let maxY = (currentScale - 1) * size.height / 2
+
         var goalX: CGFloat = 0
         var goalY: CGFloat = 0
         if goalScale > 1, let f = focus {
@@ -62,16 +63,18 @@ nonisolated final class ZoomAnimator: NSObject, @unchecked Sendable {
             let ey = center.y + currentScale * (f.y - center.y)
             let wantX = center.x - ex
             let wantY = center.y - ey
-            goalX = abs(wantX - panX) < size.width * 0.015 ? panX : wantX
-            goalY = abs(wantY - panY) < size.height * 0.015 ? panY : wantY
+            goalX = abs(wantX - panX) < size.width * centerTolerance ? panX : wantX
+            goalY = abs(wantY - panY) < size.height * centerTolerance ? panY : wantY
         }
-        
         goalX = min(max(goalX, -maxX), maxX)
         goalY = min(max(goalY, -maxY), maxY)
 
         let ap = 1 - exp(-dt / panTau)
         panX += (goalX - panX) * ap
         panY += (goalY - panY) * ap
+
+        panX = min(max(panX, -maxX), maxX)
+        panY = min(max(panY, -maxY), maxY)
 
         if abs(lastState.scale - currentScale) > 0.0005
             || abs(lastState.offset.width - panX) > 0.05

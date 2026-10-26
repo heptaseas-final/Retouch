@@ -1,3 +1,10 @@
+//
+//  CameraSessionManager.swift
+//  HiFi_v1
+//
+//  Created by Davin P on 26/10/26.
+//
+
 import AVFoundation
 
 struct LightSample {
@@ -15,7 +22,7 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
     var onFrame: ((CVPixelBuffer) -> Void)?
     var onStateChange: ((CameraState) -> Void)?
     var sampleInterval: CFTimeInterval = 0.1
-    var frameRate: Int32 = 30
+    var frameRate: Int32 = 240
     var whiteBalanceGlide: Double = 0.35
     var maxRestartAttempts = 3
 
@@ -118,12 +125,23 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
     }
 
     private func lockFrameRate(_ device: AVCaptureDevice) {
-        let supported = device.activeFormat.videoSupportedFrameRateRanges.contains {
-            $0.minFrameRate <= Double(frameRate) && Double(frameRate) <= $0.maxFrameRate
+        // Pilih format dengan fps tertinggi (maks frameRate). Kamera depan biasanya mentok di 60 fps.
+        let currentWidth = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription).width
+        var best: (format: AVCaptureDevice.Format, fps: Double, widthGap: Int32)?
+        for format in device.formats {
+            let width = CMVideoFormatDescriptionGetDimensions(format.formatDescription).width
+            guard width >= 1280 else { continue }
+            let maxFps = format.videoSupportedFrameRateRanges.map(\.maxFrameRate).max() ?? 0
+            let fps = min(maxFps, Double(frameRate))
+            let gap = abs(width - currentWidth)
+            if fps > (best?.fps ?? 0) || (fps == best?.fps && gap < (best?.widthGap ?? .max)) {
+                best = (format, fps, gap)
+            }
         }
-        guard supported else { return }
-        let duration = CMTime(value: 1, timescale: frameRate)
+        guard let best else { return }
+        let duration = CMTime(value: 1, timescale: Int32(best.fps))
         withLock(device) {
+            $0.activeFormat = best.format
             $0.activeVideoMinFrameDuration = duration
             $0.activeVideoMaxFrameDuration = duration
         }

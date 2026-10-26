@@ -4,8 +4,6 @@
 //
 //  Created by Davin P on 25/10/26.
 //
-
-
 import CoreGraphics
 
 nonisolated struct FaceObservation {
@@ -15,6 +13,7 @@ nonisolated struct FaceObservation {
     var forehead: CGPoint?
     var center: CGPoint
     var width: CGFloat
-    var yaw: Double          // derajat
-    var pitchRatio: Double   // derajat
+    var yaw: Double          // perkiraan sudut noleh, derajat
+    var pitchRatio: Double   // rasio hidung-mata, bahan hitung menunduk
+    var aspect: Double       // tinggi / lebar kotak wajah di ruang piksel, mengecil saat menunduk
 }

@@ -19,7 +19,11 @@ struct MirrorView: View {
             } else {
                 ZoomableCameraPreview(viewModel: viewModel)
                 cameraStateOverlay                          
-                luxLabel                                   
+                luxLabel
+                if GestureDebug.isEnabled {
+                    GestureDebugOverlay(viewModel: viewModel)
+                    GestureDebugDots(viewModel: viewModel)
+                }
                 VStack(spacing: 12) {
                     Spacer()
                     if viewModel.isZoomBarVisible {
@@ -52,7 +56,6 @@ struct MirrorView: View {
         }
     }
 
-    // [FITUR] lux lingkungan, kecil di pojok kanan atas
     private var luxLabel: some View {
         VStack {
             HStack {
