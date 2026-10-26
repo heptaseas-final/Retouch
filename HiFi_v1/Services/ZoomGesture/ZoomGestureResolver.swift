@@ -45,6 +45,8 @@ nonisolated struct ZoomGestureResolver {
         let dwell: TimeInterval
         if candidate == .lips {
             dwell = isFirst ? lipsFirstDwell : lipsSwitchDwell
+        } else if Self.isEye(candidate), Self.isEye(target) {
+            dwell = 0       // mata L ke mata R langsung, tanpa jeda
         } else {
             dwell = isFirst ? 0 : switchDwell
         }
@@ -54,6 +56,8 @@ nonisolated struct ZoomGestureResolver {
         }
         return target
     }
+
+    private static func isEye(_ t: ZoomTarget) -> Bool { t == .leftEye || t == .rightEye }
 
     func idleTime(now: Date) -> TimeInterval {
         target == .fullFace ? 0 : now.timeIntervalSince(lastActive)

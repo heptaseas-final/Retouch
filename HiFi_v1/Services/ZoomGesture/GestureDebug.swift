@@ -6,5 +6,5 @@
 //
 
 nonisolated enum GestureDebug { 
-    static let isEnabled = true
+    static let isEnabledGestureDebug = false
 }
