@@ -22,7 +22,7 @@ nonisolated struct ZoomDebugInfo: Equatable {
     var faceAspect = 0.0
     var headState = "-"
     var idleTime = 0.0
-    var exitHold = 2.0
+    var exitHold = 1.2
     var fps = 0
     var handFps = 0
     var gripPoint: CGPoint?         // koordinat layar

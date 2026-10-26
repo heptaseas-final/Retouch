@@ -8,10 +8,9 @@ import Vision
 import QuartzCore
 
 nonisolated final class HandPointDetector: @unchecked Sendable {
-    /// Angka awal, kalibrasi lewat overlay debug ("jepit")
     private let pinchMax: CGFloat = 0.5          // jarak antar ujung jari / ukuran telapak
     private let minJointConfidence: Float = 0.25
-    private let tipExtension: CGFloat = 0.45     // perpanjangan ke ujung brush, x ukuran telapak
+    private let tipExtension: CGFloat = 0.33    // perpanjangan ke ujung brush, x ukuran telapak
 
     private let request: VNDetectHumanHandPoseRequest = {
         let r = VNDetectHumanHandPoseRequest()
@@ -81,20 +80,23 @@ nonisolated final class HandPointDetector: @unchecked Sendable {
             let iS = scaled(index.location)
             let mS = scaled(middle.location)
             let wS = scaled(wrist.location)
-            let handSize = dist(wS, scaled(palm.location))
+            let palmS = scaled(palm.location)
+
+            let handSize = dist(wS, palmS)
             guard handSize > 0.01 else { continue }
 
             let pinch = max(dist(tS, iS), dist(tS, mS), dist(iS, mS)) / handSize
             let confidence = min(thumb.confidence, index.confidence, middle.confidence)
+
             if pinch < (scan.pinchRatio ?? .infinity) {
                 scan.pinchRatio = pinch
                 scan.confidence = confidence
             }
 
-            guard confidence >= minJointConfidence, wrist.confidence > 0.2, palm.confidence > 0.2,
-                  pinch <= pinchMax else { continue }
+            guard confidence >= minJointConfidence, wrist.confidence > 0.2, palm.confidence > 0.2, pinch <= pinchMax else { continue }
 
             let g = CGPoint(x: (tS.x + iS.x + mS.x) / 3, y: (tS.y + iS.y + mS.y) / 3)
+
             var dx = g.x - wS.x
             var dy = g.y - wS.y
             let len = hypot(dx, dy)
