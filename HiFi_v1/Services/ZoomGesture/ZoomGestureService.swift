@@ -143,21 +143,22 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
     /// Kirim target ke animator. Pinch mengalahkan semua gesture.
     private func publish(_ target: ZoomTarget) {
         if pinchScale > 1.01 {
-            send(scale: pinchScale, focus: nil)
+            send(scale: pinchScale, focus: .pinch)
             return
         }
-        let focus = focusPoint(for: target, faceTracker.points)
-        send(scale: focus == nil ? 1 : zoomScale(for: target), focus: focus)
-    }
+        var effective = target
+        if target == .fullFace, let side = headPose.sideShown { effective = .faceSide(side) }
 
-    /// Sisi wajah: skala naik dari 1 ke zoomScale mengikuti progress
-    private func zoomScale(for target: ZoomTarget) -> CGFloat {
-        switch target {
-        case .faceSide, .fullFace:
-            return 1 + (ZoomTarget.faceSide(.left).zoomScale - 1) * headPose.sideProgress
-        default:
-            return target.zoomScale
+        guard let focus = focusPoint(for: effective, faceTracker.points) else {
+            send(scale: 1, focus: .center)
+            return
         }
+        send(scale: zoomScale(for: effective), focus: .target(effective, focus))
+    }
+  
+    private func zoomScale(for target: ZoomTarget) -> CGFloat {
+        guard case .faceSide = target else { return target.zoomScale }
+        return 1 + (target.zoomScale - 1) * headPose.sideProgress
     }
 
     private func focusPoint(for target: ZoomTarget, _ p: FacePoints) -> CGPoint? {
@@ -179,8 +180,8 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         let dx = p.width * 0.08 * headPose.sideProgress
         return CGPoint(x: side == .left ? c.x - dx : c.x + dx, y: c.y)
     }
-
-    private func send(scale: CGFloat, focus: CGPoint?) {
+  
+    private func send(scale: CGFloat, focus: ZoomAnimator.Focus) {
         DispatchQueue.main.async { [animator] in animator.setGoal(scale: scale, focus: focus) }
     }
 
