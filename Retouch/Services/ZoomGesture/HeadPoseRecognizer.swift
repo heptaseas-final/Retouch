@@ -1,8 +1,8 @@
 import Foundation
 
 nonisolated struct HeadPoseRecognizer {
-    var turnEnter = 25.0            // derajat
-    var turnExit = 12.0
+    var turnEnter = 20.0            // derajat
+    var turnExit = 10.0
     var downEnter = 0.05            // kenaikan rasio hidung-mata dari posisi lurus
     var downExit = 0.025
     var turnDwell: TimeInterval = 0.5
@@ -14,7 +14,7 @@ nonisolated struct HeadPoseRecognizer {
     var pitchSign = 1.0             // ganti -1 kalau menunduk tidak terdeteksi
     var isForeheadEnabled = false
     var holdRelease: TimeInterval = 0.8   // dahi nyangkut di zona hysteresis selama ini: lepas dan belajar ulang baseline
-    var blendFull = 35.0            // derajat, progress sisi wajah penuh (mulai naik dari turnExit)
+    var blendFull = 25.0            // derajat, progress sisi wajah penuh (mulai naik dari turnExit)
     var blendTau = 0.1              // detik, makin kecil makin cepat
 
     private(set) var current: ZoomTarget?
