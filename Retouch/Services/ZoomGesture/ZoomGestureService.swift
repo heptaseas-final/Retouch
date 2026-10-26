@@ -67,7 +67,6 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
             handProximity = HandProximityRecognizer()
             resolver = ZoomGestureResolver()
             manualTarget = .fullFace
-            pinchScale = 1
             pinchBase = 1
             publish(.fullFace)
         }
