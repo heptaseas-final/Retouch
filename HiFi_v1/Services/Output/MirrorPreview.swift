@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Full-screen live mirror for the host UI to place. Frames are rotated,
-/// mirrored and drawn, with the edge light, by `MirrorRenderer`.
 struct MirrorPreview: UIViewRepresentable {
     let detector: AutoLightDetector
 

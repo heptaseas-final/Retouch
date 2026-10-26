@@ -2,62 +2,26 @@ import CoreImage
 import Observation
 import UIKit
 
-/// Auto Light Detector service (PRD; SDD §4.5 LightingController and §5 interface).
-///
-/// Wires camera → light meter → classifier → brightness / edge light / white
-/// balance. Everything adapts to the room on its own; the host UI reads the
-/// state below, places a `MirrorPreview`, and calls the methods. It handles
-/// app background/foreground itself.
-///
-/// Pipeline per sample (10×/s):
-///
-///     ISO, exposure, aperture ─► LightMeter (lux, smoothed)
-///         ─► DimLightCompensation.roomLux (screen's own light taken out)
-///         ─► LightConditionClassifier (hysteresis + 0.5 s debounce) ─► lightCondition
-///         ─► DimLightCompensation.level ─► screen brightness + edge light
-///     WB gains + face visible ─► ColorTemperatureTracker ─► camera white balance
 @MainActor
 @Observable
 final class AutoLightDetector {
-    // MARK: State for the UI
-
     private(set) var cameraState: CameraState = .idle
-    /// Committed room condition; nil until the first reading has held for the debounce window.
     private(set) var lightCondition: LightCondition?
-    /// Room light with the screen's own light taken out, in estimated lux.
     private(set) var roomLux: Double?
-    /// Lux as the camera measures it, screen light included (for debugging).
     private(set) var measuredLux: Double?
-    /// Colour temperature of the room light as currently judged.
     private(set) var roomKelvin: Double?
-    /// Strength of dim-light compensation, 0 (off) to 1.
     private(set) var dimLightLevel: Double = 0
-    /// [FITUR] True only while the room is really dark: brightness and edge light are then at full.
     private(set) var isLowLight = false
     private(set) var isFaceVisible = false
-    /// Screen brightness as applied, rounded to whole percent so the UI redraws
-    /// only when a label would change.
     private(set) var appliedBrightness: Double = 0
-    /// Non-nil while the user has taken over that dimension (PRD Epic 5).
     private(set) var manualBrightness: Double?
     private(set) var manualColor: ManualColorChoice?
-    /// [FITUR] Non-nil while the user has picked an edge-light colour; nil = white (auto).
     private(set) var filterColor: ManualColorChoice?
 
-    /// Colour temperature the face is shown as if lit by: Natural unless the user picked otherwise.
     var targetColorKelvin: Double { (manualColor ?? .natural).appearanceKelvin }
 
-    // MARK: Tuning
-
-    /// Below this room light, white balance is handed to Apple's face-aware
-    /// auto WB. There the gray-world estimate is mostly sensor noise and
-    /// pushes the face red. Leaves again above twice this.
     @ObservationIgnored var appleWhiteBalanceBelowLux = 30.0
-    /// Readings are ignored this long after the camera (re)starts, while auto
-    /// exposure is still settling and its values don't describe the room yet.
     @ObservationIgnored var warmUpTime: TimeInterval = 0.7
-
-    // MARK: Components
 
     @ObservationIgnored let renderer: MirrorRenderer
     @ObservationIgnored let frameForwarder = FrameForwarder()
@@ -69,12 +33,9 @@ final class AutoLightDetector {
     @ObservationIgnored private var compensation = DimLightCompensation()
     @ObservationIgnored private var colorTracker = ColorTemperatureTracker()
     @ObservationIgnored private var usesAppleWhiteBalance = false
-    /// Room light the manual colour is applied on top of; frozen while manual.
     @ObservationIgnored private var manualColorBase: WhiteBalance?
     @ObservationIgnored private var lastRoomBalance: WhiteBalance?
     @ObservationIgnored private var isStarted = false
-    /// False while the app is inactive (app switcher, Control Center, lock):
-    /// the screen then stays at the user's own brightness.
     @ObservationIgnored private var isAppActive = UIApplication.shared.applicationState == .active
     @ObservationIgnored private var runningSince = Date.distantPast
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
@@ -113,12 +74,7 @@ final class AutoLightDetector {
         ]
     }
 
-    // MARK: Control surface (SDD §5)
-
-    /// Starts the mirror: asks for camera permission if needed, records the
-    /// current screen brightness as the baseline, and keeps the screen awake.
     func start() {
-        // Already running: re-reading the baseline now would pick up our own boost.
         guard !(isStarted && cameraState == .running) else { return }
         isStarted = true
         UIApplication.shared.isIdleTimerDisabled = true
@@ -126,7 +82,6 @@ final class AutoLightDetector {
         camera.start()
     }
 
-    /// Stops the mirror and gives the user's brightness back.
     func stop() {
         isStarted = false
         UIApplication.shared.isIdleTimerDisabled = false
@@ -135,40 +90,32 @@ final class AutoLightDetector {
         brightness.restoreBaseline()
     }
 
-    /// For the "try again" button after `.failed`.
     func retryCameraSetup() {
         guard isStarted else { return start() }
         camera.retry()
     }
 
-    /// For the button shown with `.permissionDenied`.
     func openSystemSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
     }
 
-    /// Fixes the screen brightness at `level` (0…1), as on the phone's own scale.
-    /// The edge light is on only when `level` is full. Stops adapting.
     func setManualBrightness(_ level: Double) {
         manualBrightness = min(max(level, 0), 1)
         applyBrightness()
     }
 
-    /// Shows the face as if lit by `choice`, based on the room light right now;
-    /// colour stops adapting to the room.
     func setManualColor(_ choice: ManualColorChoice) {
         manualColor = choice
         if manualColorBase == nil { manualColorBase = lastRoomBalance }
         applyManualColor()
     }
 
-    /// [FITUR] Sets the colour of the edge light (white / warm yellow / cool blue).
     func setFilterColor(_ choice: ManualColorChoice) {
         filterColor = choice
         renderer.flashColor = Self.edgeLightColor(for: choice)
     }
 
-    /// Clears both overrides and adapts again from the current room condition.
     func resetToAuto() {
         manualBrightness = nil
         manualColor = nil
@@ -179,11 +126,6 @@ final class AutoLightDetector {
         restartColorAdaptation()
     }
 
-    // MARK: Lifecycle
-
-    /// Gives the brightness back as soon as the app starts leaving. By
-    /// `didEnterBackground` iOS may no longer apply it, and an app swiped
-    /// away in the app switcher gets no later callback at all.
     private func resignActive() {
         isAppActive = false
         guard isStarted else { return }
@@ -235,7 +177,6 @@ final class AutoLightDetector {
         renderer.targetLevel = 0
     }
 
-    /// After (re)connecting, readings start from scratch (Scenario 2.1.3).
     private func resumeFromScratch() {
         pauseAdjustments()
         runningSince = .now
@@ -247,8 +188,6 @@ final class AutoLightDetector {
             restartColorAdaptation()
         }
     }
-
-    // MARK: Adaptive logic
 
     private func ingest(_ sample: LightSample) {
         guard cameraState == .running, Date.now.timeIntervalSince(runningSince) >= warmUpTime else { return }
@@ -265,7 +204,6 @@ final class AutoLightDetector {
         if compensation.update(lux: lux, isDark: classifier.condition == .dark) {
             dimLightLevel = compensation.level
         }
-        // [FITUR] brightness/edge light only change when low light starts or ends.
         if compensation.isOn != isLowLight {
             isLowLight = compensation.isOn
             applyBrightness()
@@ -273,18 +211,12 @@ final class AutoLightDetector {
         updateColor(sample, roomLux: room)
     }
 
-    /// Auto: baseline in medium/bright rooms, rising proportionally toward
-    /// full brightness as the room gets darker (SDD §4.5).
     private func applyBrightness() {
         guard isAppActive else { return }
         if let manualBrightness {
-            // [FITUR] Manual: the slider is the real screen brightness (0…1).
             brightness.set(manualBrightness)
-            // [FITUR] Edge light only at full brightness, in any colour.
             renderer.targetLevel = manualBrightness >= 0.98 ? 1 : 0
         } else {
-            // [FITUR] Normal light: user's brightness, no edge light.
-            // Low light: full brightness and full edge light.
             brightness.ramp(to: isLowLight ? 1 : brightness.baseline)
             renderer.targetLevel = isLowLight ? 1 : 0
         }
@@ -292,7 +224,6 @@ final class AutoLightDetector {
 
     private func updateColor(_ sample: LightSample, roomLux: Double) {
         if manualColor != nil {
-            // Picked before the first reading: use the camera's auto WB as the room light.
             if manualColorBase == nil, let current = sample.current {
                 manualColorBase = current
                 applyManualColor()
@@ -303,7 +234,6 @@ final class AutoLightDetector {
         let veryDark = roomLux < appleWhiteBalanceBelowLux * (usesAppleWhiteBalance ? 2 : 1)
         if veryDark != usesAppleWhiteBalance {
             usesAppleWhiteBalance = veryDark
-            // Back in the light, recalibrate from wherever auto WB ended up, so there is no jump.
             restartColorAdaptation()
         }
 
@@ -329,12 +259,11 @@ final class AutoLightDetector {
         camera.useAutoWhiteBalance()
     }
 
-    /// [FITUR] Same colours as the swatches in the lighting sheet.
     private static func edgeLightColor(for choice: ManualColorChoice) -> CIColor {
         switch choice {
         case .natural: CIColor(red: 1, green: 1, blue: 1)
-        case .warm: CIColor(red: 1, green: 0.925, blue: 0.733)   // #FFECBB
-        case .cool: CIColor(red: 0.843, green: 0.973, blue: 1)   // #D7F8FF
+        case .warm: CIColor(red: 1, green: 0.925, blue: 0.733)
+        case .cool: CIColor(red: 0.843, green: 0.973, blue: 1)  
         }
     }
 

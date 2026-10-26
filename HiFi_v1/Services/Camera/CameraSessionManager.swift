@@ -1,43 +1,22 @@
 import AVFoundation
 
-/// One light reading taken from a sampled frame.
 struct LightSample {
-    /// Auto exposure state, for `LightMeter` (PRD Epic 2).
     var iso: Double
     var exposureDuration: Double
     var aperture: Double
-    /// EV the image sits away from what auto exposure aimed for (negative = darker).
     var exposureTargetOffset: Double
-    /// White balance the camera is applying right now.
     var current: WhiteBalance?
-    /// White balance a gray-world estimate suggests for this frame. Unlike the
-    /// camera's own auto WB, this keeps updating while WB is locked.
     var grayWorld: WhiteBalance?
 }
 
-/// Owns the front-camera session (PRD Epic 1, SDD §4.1): permission, setup,
-/// interruptions and reconnect. Reports a light sample from each sampled frame.
-///
-/// Frames never leave this class except to be drawn: only a few numbers are
-/// forwarded, and nothing is written to disk or sent over the network.
 final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     let session = AVCaptureSession()
-
-    /// Called on the main queue for each sampled frame.
     var onLightSample: ((LightSample) -> Void)?
-    /// Called on the frame queue with every frame, in sensor orientation, for display.
     var onFrame: ((CVPixelBuffer) -> Void)?
-    /// Called on the main queue.
     var onStateChange: ((CameraState) -> Void)?
-
-    /// Analysis runs at most this often; the preview itself is unaffected.
     var sampleInterval: CFTimeInterval = 0.1
-    /// Fixed preview frame rate. Without it, auto exposure lowers the frame
-    /// rate in dim rooms and the mirror stutters.
     var frameRate: Int32 = 30
-    /// Time constant of the white balance glide, in seconds.
     var whiteBalanceGlide: Double = 0.35
-    /// Restart attempts after a runtime error before reporting `.failed`.
     var maxRestartAttempts = 3
 
     private let sessionQueue = DispatchQueue(label: "autolight.camera.session")
@@ -45,12 +24,10 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
     private var device: AVCaptureDevice?
     private var lastSampleTime: CFTimeInterval = 0
 
-    // Owned by sessionQueue.
     private var isConfigured = false
     private var wantsRunning = false
     private var restartAttempts = 0
 
-    // Owned by analysisQueue.
     private var appliedGains: AVCaptureDevice.WhiteBalanceGains?
     private var targetGains: AVCaptureDevice.WhiteBalanceGains?
     private var lastGlideTime: CFTimeInterval = 0
@@ -68,10 +45,6 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
                            name: AVCaptureSession.runtimeErrorNotification, object: session)
     }
 
-    // MARK: - Lifecycle
-
-    /// Checks permission every time, so returning from Settings with access
-    /// granted starts the camera without restarting the app.
     func start() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
@@ -90,8 +63,6 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
         }
     }
 
-    /// `state`: `.idle` when the host stops the mirror, `.reconnecting` when
-    /// the app goes to background and will come back.
     func stop(reportAs state: CameraState = .idle) {
         sessionQueue.async {
             self.wantsRunning = false
@@ -100,7 +71,6 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
         }
     }
 
-    /// Builds the session again from nothing, for the "try again" button.
     func retry() {
         sessionQueue.async {
             self.session.beginConfiguration()
@@ -141,9 +111,6 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
         output.setSampleBufferDelegate(self, queue: analysisQueue)
         guard session.canAddOutput(output) else { return false }
         session.addOutput(output)
-        // Frames are left in sensor orientation (landscape); MirrorRenderer
-        // turns them into an upright mirror itself, so the result never
-        // depends on connection settings that iOS may not apply.
 
         lockFrameRate(device)
         self.device = device
@@ -166,14 +133,10 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
         DispatchQueue.main.async { self.onStateChange?(state) }
     }
 
-    // MARK: - Interruptions (PRD Epic 1, Negative 3)
-
     @objc private func sessionDidStart(_ notification: Notification) {
         sessionQueue.async { if self.wantsRunning { self.report(.running) } }
     }
 
-    /// Incoming call, another app taking the camera, Split View, …
-    /// The session resumes by itself once the interruption ends.
     @objc private func sessionWasInterrupted(_ notification: Notification) {
         sessionQueue.async { if self.wantsRunning { self.report(.reconnecting) } }
     }
@@ -186,8 +149,6 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
         }
     }
 
-    /// E.g. media services were reset. Restarts the session a few times, a
-    /// second apart, before giving up.
     @objc private func sessionRuntimeError(_ notification: Notification) {
         sessionQueue.async {
             guard self.wantsRunning else { return }
@@ -212,9 +173,6 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
         }
     }
 
-    // MARK: - White balance (PRD Epic 4)
-
-    /// Hands white balance back to the camera's continuous auto mode.
     func useAutoWhiteBalance() {
         analysisQueue.async {
             self.targetGains = nil
@@ -225,8 +183,6 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
         }
     }
 
-    /// Takes manual control of white balance and glides to `target` over a
-    /// fraction of a second instead of jumping, so skin colour never snaps.
     func glideWhiteBalance(to target: WhiteBalance) {
         analysisQueue.async {
             guard let device = self.device, device.isLockingWhiteBalanceWithCustomDeviceGainsSupported else { return }
@@ -240,7 +196,6 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
         }
     }
 
-    /// Runs on every frame (analysisQueue) while a glide is in progress.
     private func stepWhiteBalanceGlide(_ device: AVCaptureDevice) {
         guard let target = targetGains, var gains = appliedGains else { return }
         let now = CACurrentMediaTime()
@@ -256,7 +211,6 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
         let finished = remaining < 0.002
         if finished { gains = target }
 
-        // Skip the device call when nothing visible would change.
         if !finished, let applied = appliedGains,
            max(abs(gains.redGain - applied.redGain), abs(gains.blueGain - applied.blueGain)) < 0.001 {
             return
@@ -280,11 +234,9 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
             body(device)
             device.unlockForConfiguration()
         } catch {
-            print("Camera configuration failed: \(error)")
+            //print("Camera configuration failed: \(error)")
         }
     }
-
-    // MARK: - Frame sampling
 
     func captureOutput(_ output: AVCaptureOutput,
                        didOutput sampleBuffer: CMSampleBuffer,
