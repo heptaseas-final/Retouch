@@ -8,6 +8,7 @@ import AVFoundation
 
 nonisolated protocol ZoomGestureServicing: AnyObject, Sendable {
     var onZoomChange: (@Sendable (ZoomState) -> Void)? { get set }
+    var onDebugInfo: (@Sendable (ZoomDebugInfo) -> Void)? { get set }
     func start()
     func stop()
     func setViewSize(_ size: CGSize)

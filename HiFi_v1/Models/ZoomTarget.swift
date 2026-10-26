@@ -18,8 +18,8 @@ nonisolated enum ZoomTarget: Equatable {
         case .fullFace: 1.1
         case .leftEye, .rightEye: 2.5
         case .lips: 2.0
-        case .forehead: 1.75
-        case .faceSide: 1.4
+        case .forehead: 2.0
+        case .faceSide: 1.5
         }
     }
 }

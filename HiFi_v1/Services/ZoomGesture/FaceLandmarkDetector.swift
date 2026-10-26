@@ -4,11 +4,9 @@
 //
 //  Created by Davin P on 25/10/26.
 //
-
-
 import Vision
 
-/// face detector 
+/// Deteksi wajah (mata, bibir, dahi, perkiraan sudut kepala). Jalan async, frame dilewati kalau masih sibuk.
 nonisolated final class FaceLandmarkDetector: @unchecked Sendable {
     private let request = VNDetectFaceLandmarksRequest()
     private let queue = DispatchQueue(label: "zoom.face")
@@ -30,8 +28,9 @@ nonisolated final class FaceLandmarkDetector: @unchecked Sendable {
         guard !skip else { return }
 
         let aspect = CGFloat(CVPixelBufferGetHeight(pixelBuffer)) / CGFloat(CVPixelBufferGetWidth(pixelBuffer))
+        nonisolated(unsafe) let buffer = pixelBuffer
         queue.async { [self] in
-            let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .leftMirrored)
+            let handler = VNImageRequestHandler(cvPixelBuffer: buffer, orientation: .leftMirrored)
             try? handler.perform([request])
             let face = parse(aspect: aspect)
             lock.lock()
@@ -69,6 +68,7 @@ nonisolated final class FaceLandmarkDetector: @unchecked Sendable {
             forehead = CGPoint(x: mid.x, y: mid.y + (box.maxY - mid.y) * 0.5)
         }
 
+        // Vision tidak mengisi yaw/pitch di device ini, jadi sudut diperkirakan dari landmark
         var yaw = 0.0
         var pitchRatio = Double.nan
         if let l = leftEye, let r = rightEye, let n = center(lm.nose) {
@@ -89,7 +89,8 @@ nonisolated final class FaceLandmarkDetector: @unchecked Sendable {
             center: CGPoint(x: box.midX, y: box.midY),
             width: box.width,
             yaw: yaw,
-            pitchRatio: pitchRatio
+            pitchRatio: pitchRatio,
+            aspect: Double(box.height / (box.width * aspect))
         )
     }
 }

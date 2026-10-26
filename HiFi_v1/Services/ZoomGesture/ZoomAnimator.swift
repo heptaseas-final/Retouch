@@ -4,9 +4,9 @@
 //
 //  Created by Davin P on 25/10/26.
 //
-
 import SwiftUI
 
+/// Menghaluskan skala dan geser di 60 fps. Semua state hanya disentuh di main thread.
 nonisolated final class ZoomAnimator: NSObject, @unchecked Sendable {
     enum Focus: Equatable {
         case center
@@ -123,6 +123,7 @@ nonisolated final class ZoomAnimator: NSObject, @unchecked Sendable {
 
         let maxX = (currentScale - 1) * size.width / 2
         let maxY = (currentScale - 1) * size.height / 2
+
         var goalX: CGFloat = 0
         var goalY: CGFloat = 0
         if goalScale > 1, let f = lockedFocus {

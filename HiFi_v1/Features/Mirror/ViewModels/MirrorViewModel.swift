@@ -10,6 +10,7 @@ final class MirrorViewModel {
     private let zoomGesture: ZoomGestureServicing
 
     private(set) var selectedPart: ZoomPart = .face
+    private(set) var debugInfo = ZoomDebugInfo()
     private(set) var isGestureEnabled = true
     private(set) var zoomState = ZoomState()
     var isLightingSheetPresented = false
@@ -36,7 +37,12 @@ final class MirrorViewModel {
         self.lighting = LightingViewModel(detector: detector)
         self.zoomGesture = zoomGesture
         zoomGesture.onZoomChange = { [weak self] state in
-            Task { @MainActor in self?.zoomState = state }
+            guard let self else { return }
+            Task { @MainActor in self.zoomState = state }
+        }
+        zoomGesture.onDebugInfo = { [weak self] info in
+            guard let self else { return }
+            Task { @MainActor in self.debugInfo = info }
         }
         detector.frameForwarder.setHandler { [zoomGesture] buffer in
             zoomGesture.process(buffer)

@@ -13,12 +13,15 @@ import Foundation
 nonisolated struct HandProximityRecognizer {
     var enterDistance: CGFloat = 0.12   // rasio terhadap tinggi layar
     var exitDistance: CGFloat = 0.18
-    var switchRatio: CGFloat = 0.7      // pindah target kalau jelas lebih dekat
+    var switchRatio: CGFloat = 0.85     // pindah target kalau lebih dekat dari ini x jarak target sekarang
+    var switchMargin: CGFloat = 0.015   // dan selisih jarak minimal ini (rasio tinggi layar), cegah bolak-balik
+    var switchHold: TimeInterval = 0.25 // kandidat baru harus tetap terdekat selama ini
 
     private var filterX = OneEuroFilter()
     private var filterY = OneEuroFilter()
     private var lastHandTime: TimeInterval = 0
     private var prevHand: CGPoint?
+    private var switchPending: (target: ZoomTarget, since: Date)?
     private var enterVotes: [Bool] = []
     private var holdVotes: [Bool] = []
     private(set) var current: ZoomTarget?
@@ -66,7 +69,7 @@ nonisolated struct HandProximityRecognizer {
         }
     }
 
-    mutating func update(hand: CGPoint?, points: FacePoints, viewHeight H: CGFloat) -> ZoomTarget? {
+    mutating func update(hand: CGPoint?, points: FacePoints, viewHeight H: CGFloat, now: Date) -> ZoomTarget? {
         var best: (target: ZoomTarget, dist: CGFloat)?
         if let h = hand {
             for (target, p) in points.handTargets {
@@ -91,13 +94,26 @@ nonisolated struct HandProximityRecognizer {
         }
         if !holdOK {
             current = nil
+            switchPending = nil
             enterVotes = []
             holdVotes = []
-        } else if enterOK, let b = best, b.target != cur, let h = hand,
-                  let cp = Self.position(of: cur, in: points),
-                  b.dist < switchRatio * hypot(h.x - cp.x, h.y - cp.y) / H {
-            current = b.target
-            holdVotes = [true]
+            return current
+        }
+        var wantsSwitch = false
+        if enterOK, let b = best, b.target != cur, let h = hand,
+           let cp = Self.position(of: cur, in: points) {
+            let curDist = hypot(h.x - cp.x, h.y - cp.y) / H
+            wantsSwitch = b.dist < switchRatio * curDist && curDist - b.dist >= switchMargin
+        }
+        if wantsSwitch, let b = best {
+            if switchPending?.target != b.target { switchPending = (b.target, now) }
+            if let p = switchPending, now.timeIntervalSince(p.since) >= switchHold {
+                current = b.target
+                holdVotes = [true]
+                switchPending = nil
+            }
+        } else {
+            switchPending = nil
         }
         return current
     }
