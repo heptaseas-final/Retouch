@@ -17,10 +17,9 @@ struct MirrorView: View {
             if viewModel.permission == .denied {
                 CameraPermissionDeniedView(onOpenSettings: viewModel.openSettings)
             } else {
-                MirrorPreview(detector: viewModel.detector)   // [FITUR] ganti CameraPreview
-                    .ignoresSafeArea()
-                cameraStateOverlay                            // [FITUR]
-                luxLabel                                      // [FITUR]
+                ZoomableCameraPreview(viewModel: viewModel)
+                cameraStateOverlay                          
+                luxLabel                                   
                 VStack(spacing: 12) {
                     Spacer()
                     if viewModel.isZoomBarVisible {
@@ -29,7 +28,7 @@ struct MirrorView: View {
                     }
                     ActionButtonRow(isZoomBarVisible: viewModel.isZoomBarVisible,
                                     onLighting: viewModel.showLighting,
-                                    onZoom: viewModel.toggleZoomBar,
+                                    onZoom: viewModel.toggleGesture,
                                     onMic: {})
                 }
                 .padding(.horizontal, 24)

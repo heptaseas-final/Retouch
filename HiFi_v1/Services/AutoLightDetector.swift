@@ -60,6 +60,7 @@ final class AutoLightDetector {
     // MARK: Components
 
     @ObservationIgnored let renderer: MirrorRenderer
+    @ObservationIgnored let frameForwarder = FrameForwarder()
     @ObservationIgnored private let camera = CameraSessionManager()
     @ObservationIgnored private let faceTracker = FaceTracker()
     @ObservationIgnored private let brightness = BrightnessController()
@@ -90,7 +91,10 @@ final class AutoLightDetector {
         }
         camera.onStateChange = { [weak self] in self?.cameraStateChanged($0) }
         camera.onLightSample = { [weak self] in self?.ingest($0) }
-        camera.onFrame = { [renderer] in renderer.render($0) }
+        camera.onFrame = { [renderer, frameForwarder] in
+            renderer.render($0)
+            frameForwarder.send($0)
+        }
 
         let center = NotificationCenter.default
         observers = [
