@@ -7,8 +7,6 @@
 
 import Foundation
 
-/// Menentukan target akhir: tangan mengalahkan kepala, zoom out setelah 3 detik tanpa gesture.
-/// Pindah antar target harus bertahan sebentar, supaya tangan yang cuma lewat tidak memicu zoom.
 nonisolated struct ZoomGestureResolver {
     var exitHold: TimeInterval = 3.0
     var switchDwell: TimeInterval = 0.2
