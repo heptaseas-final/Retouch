@@ -4,19 +4,40 @@
 //
 //  Created by Davin P on 25/10/26.
 //
-
-
 import Vision
 
-/// titik tangan, tengah ujung jempol dan telunjuk (seperti memegang brush).
 nonisolated final class HandPointDetector: @unchecked Sendable {
     private let request: VNDetectHumanHandPoseRequest = {
         let r = VNDetectHumanHandPoseRequest()
         r.maximumHandCount = 2
         return r
     }()
+    private let queue = DispatchQueue(label: "zoom.hand")
+    private let lock = NSLock()
+    private var busy = false
+    private var cache: [CGPoint] = []
 
-    func detect(in pixelBuffer: CVPixelBuffer) -> [CGPoint] {
+    var latest: [CGPoint] { lock.withLock { cache } }
+
+    /// frame dilewati kalau proses sebelumnya belum selesai
+    func submit(_ pixelBuffer: CVPixelBuffer) {
+        let skip = lock.withLock { () -> Bool in
+            if busy { return true }
+            busy = true
+            return false
+        }
+        guard !skip else { return }
+
+        queue.async { [self] in
+            let points = detect(pixelBuffer)
+            lock.withLock {
+                cache = points
+                busy = false
+            }
+        }
+    }
+
+    private func detect(_ pixelBuffer: CVPixelBuffer) -> [CGPoint] {
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .leftMirrored)
         try? handler.perform([request])
         guard let results = request.results else { return [] }

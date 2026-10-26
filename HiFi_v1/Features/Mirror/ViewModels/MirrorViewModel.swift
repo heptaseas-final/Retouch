@@ -1,73 +1,68 @@
-//
-//  MirrorViewModel.swift
-//  HiFi_v1
-//
-//  Created by Davin P on 25/10/26.
-//
-
 import SwiftUI
-import AVFoundation
-import Combine
 import Observation
 
 @MainActor
 @Observable
 final class MirrorViewModel {
-    private(set) var permission: CameraPermissionStatus
+    // Kamera dimiliki AutoLightDetector, karena dua AVCaptureSession tidak bisa jalan bareng
+    let detector: AutoLightDetector
+    let lighting: LightingViewModel
+    private let zoomGesture: ZoomGestureServicing
+
     private(set) var selectedPart: ZoomPart = .face
     private(set) var isGestureEnabled = true
     private(set) var zoomState = ZoomState()
     var isLightingSheetPresented = false
 
-    let lighting = LightingViewModel()
-    private let camera: CameraServicing
-    private let zoomGesture: ZoomGestureServicing
-
-    var session: AVCaptureSession { camera.session }
     /// Bar zoom manual muncul saat gesture dimatikan
     var isZoomBarVisible: Bool { !isGestureEnabled }
 
-    init(camera: CameraServicing = CameraService(),
-         zoomGesture: ZoomGestureServicing = ZoomGestureService()) {
-        self.camera = camera
+    /// Dipetakan dari cameraState detector, supaya MirrorView tetap pakai `permission`
+    var permission: CameraPermissionStatus {
+        detector.cameraState == .permissionDenied ? .denied : .granted
+    }
+
+    var cameraState: CameraState { detector.cameraState }
+    func retryCamera() { detector.retryCameraSetup() }
+
+    /// Lux ruangan (cahaya layar sudah dikeluarkan), untuk label di pojok kanan atas
+    var luxText: String {
+        detector.roomLux.map { "\(Int($0.rounded())) lux" } ?? "– lux"
+    }
+
+    init(zoomGesture: ZoomGestureServicing = ZoomGestureService()) {
+        let detector = AutoLightDetector()
+        self.detector = detector
+        self.lighting = LightingViewModel(detector: detector)
         self.zoomGesture = zoomGesture
-        self.permission = camera.permissionStatus()
-        camera.frameHandler = { [zoomGesture] buffer in zoomGesture.process(buffer) }
         zoomGesture.onZoomChange = { [weak self] state in
             Task { @MainActor in self?.zoomState = state }
+        }
+        detector.frameForwarder.setHandler { [zoomGesture] buffer in
+            zoomGesture.process(buffer)
         }
     }
 
     // MARK: - Kamera
     func start() async {
-        if permission == .notDetermined {
-            permission = await camera.requestPermission() ? .granted : .denied
-        }
-        if permission == .granted {
-            camera.start()
-            zoomGesture.start()
-        }
+        detector.start()
+        zoomGesture.start()
     }
 
     func stop() {
-        camera.stop()
+        // Setiap app keluar atau ditutup, pengaturan manual dibuang: buka lagi mulai dari auto
+        lighting.setAuto(true)
+        detector.stop()
         zoomGesture.stop()
     }
 
-    /// Dipanggil saat app aktif lagi, misalnya setelah dari Settings.
+    /// Dipanggil saat app aktif lagi, misalnya setelah dari Settings
     func refresh() {
-        guard permission != .notDetermined else { return }
-        permission = camera.permissionStatus()
-        if permission == .granted {
-            camera.start()
-            zoomGesture.start()
-        }
+        detector.start()
+        zoomGesture.start()
     }
 
-    func openSettings() {
-        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-        UIApplication.shared.open(url)
-    }
+    func openSettings() { detector.openSystemSettings() }
 
     // MARK: - Zoom
     func toggleGesture() {

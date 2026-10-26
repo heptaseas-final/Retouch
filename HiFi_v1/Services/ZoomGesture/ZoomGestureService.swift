@@ -36,14 +36,14 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         stateQueue.async { [self] in viewSize = size }
     }
 
-    // MARK: - Frame (dipanggil di queue kamera)
     func process(_ pixelBuffer: CVPixelBuffer) {
         let isAuto = stateQueue.sync { isGestureEnabled }
         faceDetector.submit(pixelBuffer)
+        if isAuto { handDetector.submit(pixelBuffer) }
         let face = faceDetector.latest
-        let hands = isAuto ? handDetector.detect(in: pixelBuffer) : []
+        let hands = isAuto ? handDetector.latest : []
         let imageSize = CGSize(width: CVPixelBufferGetHeight(pixelBuffer),
-                               height: CVPixelBufferGetWidth(pixelBuffer))
+                            height: CVPixelBufferGetWidth(pixelBuffer))
         stateQueue.async { [self] in
             update(face: face, hands: hands, imageSize: imageSize)
         }

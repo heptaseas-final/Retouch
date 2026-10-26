@@ -18,13 +18,18 @@ struct MirrorView: View {
                 CameraPermissionDeniedView(onOpenSettings: viewModel.openSettings)
             } else {
                 ZoomableCameraPreview(viewModel: viewModel)
+                cameraStateOverlay                          
+                luxLabel                                   
                 VStack(spacing: 12) {
                     Spacer()
                     if viewModel.isZoomBarVisible {
                         ZoomPartBar(selected: viewModel.selectedPart, onSelect: viewModel.select)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
-                    ActionButtonRow(isZoomBarVisible: viewModel.isZoomBarVisible, onLighting: viewModel.showLighting, onZoom: viewModel.toggleGesture, onMic: {})
+                    ActionButtonRow(isZoomBarVisible: viewModel.isZoomBarVisible,
+                                    onLighting: viewModel.showLighting,
+                                    onZoom: viewModel.toggleGesture,
+                                    onMic: {})
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 16)
@@ -44,6 +49,53 @@ struct MirrorView: View {
             case .background: viewModel.stop()
             default: break
             }
+        }
+    }
+
+    // [FITUR] lux lingkungan, kecil di pojok kanan atas
+    private var luxLabel: some View {
+        VStack {
+            HStack {
+                Spacer()
+                Text(viewModel.luxText)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.black.opacity(0.5), in: Capsule())
+            }
+            Spacer()
+        }
+        .padding(.top, 8)
+        .padding(.trailing, 16)
+        .allowsHitTesting(false)
+    }
+
+    // [FITUR] state kamera dari detector (PRD Epic 1)
+    @ViewBuilder
+    private var cameraStateOverlay: some View {
+        switch viewModel.cameraState {
+        case .failed:
+            VStack(spacing: 16) {
+                Text("Camera is not opened")
+                    .foregroundStyle(.white)
+                Button("Try again", action: viewModel.retryCamera)
+                    .buttonStyle(.borderedProminent)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.black)
+        case .reconnecting:
+            VStack {
+                Label("Reconnecting…", systemImage: "arrow.triangle.2.circlepath")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(.ultraThinMaterial, in: Capsule())
+                Spacer()
+            }
+            .padding(.top)
+        default:
+            EmptyView()
         }
     }
 }

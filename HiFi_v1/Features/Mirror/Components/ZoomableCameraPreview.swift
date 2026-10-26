@@ -4,8 +4,6 @@
 //
 //  Created by Davin P on 25/10/26.
 //
-
-
 import SwiftUI
 
 struct ZoomableCameraPreview: View {
@@ -13,7 +11,7 @@ struct ZoomableCameraPreview: View {
 
     var body: some View {
         GeometryReader { geo in
-            CameraPreview(session: viewModel.session)
+            MirrorPreview(detector: viewModel.detector)
                 .frame(width: geo.size.width, height: geo.size.height)
                 .scaleEffect(viewModel.zoomState.scale)
                 .offset(viewModel.zoomState.offset)
