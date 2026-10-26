@@ -74,8 +74,7 @@ struct DimLightCompensation {
             }
 
         case .on:
-            // Follow the room as it gets darker or lighter, without first
-            // going back to baseline (Scenario 3.1.3).
+            // Follow the room as it gets darker or lighter.
             let target = levelFor(roomLux(from: lux))
             if abs(target - level) >= levelStep { level = target }
         }
