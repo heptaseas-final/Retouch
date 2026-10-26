@@ -23,11 +23,11 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: bsd.iosda.Retouch
-        PRODUCT_NAME: "Retouch"
+        PRODUCT_NAME: "Retouch: The Better Mirror"
         MARKETING_VERSION: ${VERSION_NUMBER}
         CURRENT_PROJECT_VERSION: ${BUILD_NUMBER}
         CODE_SIGN_STYLE: Automatic
-        TARGETED_DEVICE_FAMILY: "1,2"
+        TARGETED_DEVICE_FAMILY: "1"
         ENABLE_PREVIEWS: YES
 
         # Info.plist
@@ -35,6 +35,7 @@ targets:
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        INFOPLIST_KEY_CFBundleDisplayName: "Retouch"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_NSCameraUsageDescription: "Camera is used to track your face for the AR makeup tutorial."
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Microphone is used to listen to your 'next' and 'previous' voice commands."
