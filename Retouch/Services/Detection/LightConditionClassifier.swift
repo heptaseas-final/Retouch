@@ -2,7 +2,7 @@ import Foundation
 
 struct LightConditionClassifier {
     struct Thresholds {
-        var darkBelow = 10.0
+        var darkBelow = 20.0
         var brightAbove = 750.0
         var hysteresis = 0.1
     }
