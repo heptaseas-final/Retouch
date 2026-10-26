@@ -8,9 +8,9 @@ import Foundation
 
 nonisolated struct ZoomGestureResolver {
     var exitHold: TimeInterval = 2.0          // tanpa gesture selama ini, zoom out
-    var switchDwell: TimeInterval = 0.2
-    var lipsSwitchDwell: TimeInterval = 0.6   // pindah ke bibir dari target lain
-    var lipsFirstDwell: TimeInterval = 0.6    // zoom pertama ke bibir dari full face
+    var switchDwell: TimeInterval = 0.0
+    var lipsSwitchDwell: TimeInterval = 0.0   // pindah ke bibir dari target lain
+    var lipsFirstDwell: TimeInterval = 0.0    // zoom pertama ke bibir dari full face
     var handCooldown: TimeInterval = 0.5      // kepala ditekan setelah tangan hilang
     var exitCooldown: TimeInterval = 1.0      // kepala ditekan setelah zoom out
 

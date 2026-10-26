@@ -15,7 +15,7 @@ nonisolated struct HandProximityRecognizer {
     var exitDistance: CGFloat = 0.18
     var switchRatio: CGFloat = 0.85     // pindah target kalau lebih dekat dari ini x jarak target sekarang
     var switchMargin: CGFloat = 0.015   // dan selisih jarak minimal ini (rasio tinggi layar), cegah bolak-balik
-    var switchHold: TimeInterval = 0.25 // kandidat baru harus tetap terdekat selama ini
+    var switchHold: TimeInterval = 0.0 // kandidat baru harus tetap terdekat selama ini
 
     private var filterX = OneEuroFilter()
     private var filterY = OneEuroFilter()

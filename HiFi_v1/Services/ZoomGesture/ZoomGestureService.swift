@@ -76,6 +76,8 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
     func setManualTarget(_ target: ZoomTarget) {
         stateQueue.async { [self] in
             manualTarget = target
+            pinchScale = 1
+            pinchBase = 1
             if !isGestureEnabled { publish(target) }
         }
     }
