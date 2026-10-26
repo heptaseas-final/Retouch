@@ -112,11 +112,14 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
     /// Kirim target ke animator. Pinch mengalahkan semua gesture.
     private func publish(_ target: ZoomTarget) {
         if pinchScale > 1.01 {
-            send(scale: pinchScale, focus: nil)
+            send(scale: pinchScale, focus: .pinch)
             return
         }
-        let focus = focusPoint(for: target, faceTracker.points)
-        send(scale: focus == nil ? 1 : target.zoomScale, focus: focus)
+        guard let focus = focusPoint(for: target, faceTracker.points) else {
+            send(scale: 1, focus: .center)
+            return
+        }
+        send(scale: target.zoomScale, focus: .target(target, focus))
     }
 
     private func focusPoint(for target: ZoomTarget, _ p: FacePoints) -> CGPoint? {
@@ -133,7 +136,7 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         }
     }
 
-    private func send(scale: CGFloat, focus: CGPoint?) {
+    private func send(scale: CGFloat, focus: ZoomAnimator.Focus) {
         DispatchQueue.main.async { [animator] in animator.setGoal(scale: scale, focus: focus) }
     }
 }

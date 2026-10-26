@@ -18,10 +18,12 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
     var frameRate: Int32 = 30
     var whiteBalanceGlide: Double = 0.35
     var maxRestartAttempts = 3
+    var preferredStabilization: AVCaptureVideoStabilizationMode = .cinematicExtendedEnhanced
 
     private let sessionQueue = DispatchQueue(label: "autolight.camera.session")
     private let analysisQueue = DispatchQueue(label: "autolight.camera.analysis", qos: .userInitiated)
     private var device: AVCaptureDevice?
+    private var videoConnection: AVCaptureConnection?
     private var lastSampleTime: CFTimeInterval = 0
 
     private var isConfigured = false
@@ -91,6 +93,7 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
             isConfigured = true
         }
         if !session.isRunning { session.startRunning() }
+        updateStabilizationState()
         report(session.isRunning ? .running : .failed)
     }
 
@@ -111,10 +114,39 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
         output.setSampleBufferDelegate(self, queue: analysisQueue)
         guard session.canAddOutput(output) else { return false }
         session.addOutput(output)
+        enableStabilization(output.connection(with: .video), device)
 
         lockFrameRate(device)
         self.device = device
         return true
+    }
+
+    private func enableStabilization(_ connection: AVCaptureConnection?, _ device: AVCaptureDevice) {
+        videoConnection = connection
+        guard let connection, connection.isVideoStabilizationSupported,
+              device.activeFormat.isVideoStabilizationModeSupported(preferredStabilization) else { return }
+        connection.preferredVideoStabilizationMode = preferredStabilization
+    }
+
+    private func updateStabilizationState() {
+        #if DEBUG
+        let active = videoConnection?.activeVideoStabilizationMode ?? .off
+        print("[Camera] stabilization preferred=\(Self.name(preferredStabilization)) active=\(Self.name(active))")
+        #endif
+    }
+
+    private static func name(_ mode: AVCaptureVideoStabilizationMode) -> String {
+        switch mode {
+        case .off: "off"
+        case .standard: "standard"
+        case .cinematic: "cinematic"
+        case .cinematicExtended: "cinematicExtended"
+        case .previewOptimized: "previewOptimized"
+        case .cinematicExtendedEnhanced: "cinematicExtendedEnhanced"
+        case .lowLatency: "lowLatency"
+        case .auto: "auto"
+        @unknown default: "unknown(\(mode.rawValue))"
+        }
     }
 
     private func lockFrameRate(_ device: AVCaptureDevice) {
