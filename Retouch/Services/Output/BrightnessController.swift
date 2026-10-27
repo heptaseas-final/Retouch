@@ -15,13 +15,34 @@ final class BrightnessController {
     private var lastBoost: CGFloat?
     private var displayLink: CADisplayLink?
     private var lastTick: CFTimeInterval = 0
+    
+    private enum Key {
+        static let baseline = "bc.baseline"
+        static let boosted = "bc.boosted"
+        static let lastBoost = "bc.lastBoost"
+    }
+    private let defaults = UserDefaults.standard
 
     init() {
-        let value = Self.screen?.brightness ?? 0.5
+        let screenValue = Self.screen?.brightness ?? 0.5
+        var value = screenValue
+        var boost: CGFloat?
+
+        // Sesi lalu berakhir saat boosted dan layar masih nyangkut di nilai itu:
+        // pakai baseline asli, bukan nilai nyangkut tadi.
+        if defaults.bool(forKey: Key.boosted),
+           let savedBaseline = defaults.object(forKey: Key.baseline) as? Double,
+           let savedBoost = defaults.object(forKey: Key.lastBoost) as? Double,
+           abs(screenValue - CGFloat(savedBoost)) <= 0.01 {
+            value = CGFloat(savedBaseline)
+            boost = screenValue
+        }
+
         baseline = value
         target = value
         current = value
         written = value
+        lastBoost = boost
     }
 
     func captureBaseline() {
@@ -52,7 +73,13 @@ final class BrightnessController {
     private func apply(_ value: CGFloat) {
         current = value
         written = value
-        if abs(value - baseline) > 0.01 { lastBoost = value }
+        let boosted = abs(value - baseline) > 0.01
+        if boosted {
+            lastBoost = value
+            defaults.set(Double(value), forKey: Key.lastBoost)
+        }
+        defaults.set(boosted, forKey: Key.boosted)
+        defaults.set(Double(baseline), forKey: Key.baseline)
         Self.screen?.brightness = value
         onChange?(value)
     }

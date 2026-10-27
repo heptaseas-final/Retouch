@@ -17,6 +17,7 @@ final class AutoLightDetector {
     private(set) var manualBrightness: Double?
     private(set) var manualColor: ManualColorChoice?
     private(set) var filterColor: ManualColorChoice?
+    private(set) var edgeLightLevel: Double = 0   // 0...1 ketebalan border
 
     var targetColorKelvin: Double { (manualColor ?? .natural).appearanceKelvin }
 
@@ -130,7 +131,8 @@ final class AutoLightDetector {
         isAppActive = false
         guard isStarted else { return }
         brightness.restoreBaseline()
-        renderer.targetLevel = 0
+//        renderer.targetLevel = 0
+        edgeLightLevel = 0
     }
 
     private func becomeActive() {
@@ -174,7 +176,9 @@ final class AutoLightDetector {
         isFaceVisible = false
         dimLightLevel = 0
         isLowLight = false
-        renderer.targetLevel = 0
+//        renderer.targetLevel = 0
+        edgeLightLevel = 0
+        renderer.enhancementOn = false
     }
 
     private func resumeFromScratch() {
@@ -206,6 +210,7 @@ final class AutoLightDetector {
         }
         if compensation.isOn != isLowLight {
             isLowLight = compensation.isOn
+            renderer.enhancementOn = isLowLight   // Enhanced menyala hanya saat low light
             applyBrightness()
         }
         updateColor(sample, roomLux: room)
@@ -215,10 +220,19 @@ final class AutoLightDetector {
         guard isAppActive else { return }
         if let manualBrightness {
             brightness.set(manualBrightness)
-            renderer.targetLevel = manualBrightness >= 0.98 ? 1 : 0
+            // Border thickness follows the slider above the user's own brightness:
+            // none at their level, thickest at full (same as auto in low light).
+            let baseline = Double(brightness.baseline)
+//            renderer.targetLevel = baseline >= 0.98
+//                ? (manualBrightness >= 0.98 ? 1 : 0)
+//                : min(max((manualBrightness - baseline) / (1 - baseline), 0), 1)
+            edgeLightLevel = baseline >= 0.98
+                ? (manualBrightness >= 0.98 ? 1 : 0)
+                : min(max((manualBrightness - baseline) / (1 - baseline), 0), 1)
         } else {
             brightness.ramp(to: isLowLight ? 1 : brightness.baseline)
-            renderer.targetLevel = isLowLight ? 1 : 0
+//            renderer.targetLevel = isLowLight ? 1 : 0
+            edgeLightLevel = isLowLight ? 1 : 0
         }
     }
 
@@ -263,7 +277,7 @@ final class AutoLightDetector {
         switch choice {
         case .natural: CIColor(red: 1, green: 1, blue: 1)
         case .warm: CIColor(red: 1, green: 0.925, blue: 0.733)
-        case .cool: CIColor(red: 0.843, green: 0.973, blue: 1)  
+        case .cool: CIColor(red: 0.843, green: 0.973, blue: 1)
         }
     }
 
