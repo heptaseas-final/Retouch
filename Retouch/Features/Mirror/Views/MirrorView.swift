@@ -1,10 +1,3 @@
-//
-//  MirrorView.swift
-//  HiFi_v1
-//
-//  Created by Davin P on 25/10/26.
-//
-
 import SwiftUI
 
 struct MirrorView: View {
@@ -18,7 +11,11 @@ struct MirrorView: View {
                 CameraPermissionDeniedView(onOpenSettings: viewModel.openSettings)
             } else {
                 ZoomableCameraPreview(viewModel: viewModel)
-                cameraStateOverlay                          
+                // Border light: saudara dari preview, bukan di dalamnya, jadi tidak ikut zoom
+                EdgeLightOverlay(level: viewModel.detector.edgeLightLevel, color: edgeColor)
+                    .ignoresSafeArea()
+                    .animation(.easeInOut(duration: 0.25), value: viewModel.detector.edgeLightLevel)
+                cameraStateOverlay
                 luxLabel
                 if GestureDebug.isEnabledGestureDebug {
                     GestureDebugOverlay(viewModel: viewModel)
@@ -56,6 +53,15 @@ struct MirrorView: View {
         }
     }
 
+    /// Warna border sesuai pilihan di sheet; putih kalau belum memilih.
+    private var edgeColor: Color {
+        switch viewModel.detector.filterColor {
+        case .warm: Color(hex: 0xFFECBB)
+        case .cool: Color(hex: 0xD7F8FF)
+        default: .white
+        }
+    }
+
     private var luxLabel: some View {
         VStack {
             HStack {
@@ -74,7 +80,6 @@ struct MirrorView: View {
         .allowsHitTesting(false)
     }
 
-    // [FITUR] state kamera dari detector (PRD Epic 1)
     @ViewBuilder
     private var cameraStateOverlay: some View {
         switch viewModel.cameraState {
