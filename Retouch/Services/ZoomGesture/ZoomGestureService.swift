@@ -29,6 +29,11 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
     private var pinchScale: CGFloat = 1
     private var pinchBase: CGFloat = 1
 
+    // Kuas aktif: noleh tidak boleh memicu zoom sisi wajah saat makeup
+    private let brushHold: TimeInterval = 1.5
+    private var brushActiveUntil = Date.distantPast
+    private var brushActive = false
+
     // Debug
     private var lastDebugSent = Date.distantPast
     private var fpsCount = 0
@@ -66,6 +71,8 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
             headPose = HeadPoseRecognizer()
             handProximity = HandProximityRecognizer()
             resolver = ZoomGestureResolver()
+            brushActive = false
+            brushActiveUntil = .distantPast
             manualTarget = .fullFace
             pinchBase = 1
             publish(.fullFace)
@@ -120,7 +127,16 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         let points = faceTracker.update(face: face, covering: covering, converter: converter)
 
         let handTarget = handProximity.update(hand: hand, points: points, viewHeight: H, now: now)
-        let headTarget = headPose.update(face: covering ? nil : face, now: now)
+
+        // Kuas dekat fitur atau menutupi wajah: noleh diabaikan, ditahan sebentar supaya tidak kedap-kedip
+        let nearFace = points.center.map { c in
+            tips.contains { hypot($0.x - c.x, $0.y - c.y) < points.width * 1.2 }
+        } ?? false
+        if handTarget != nil || covering || nearFace {
+            brushActiveUntil = now.addingTimeInterval(brushHold)
+        }
+
+        let headTarget = headPose.update(face: (covering || brushActive) ? nil : face, now: now)
         let target = resolver.resolve(hand: handTarget, head: headTarget, now: now)
 
         // Gate sisi wajah tetap di HeadPoseRecognizer dan resolver. Blend hanya menghaluskan gerakannya.
@@ -148,7 +164,7 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
             return
         }
         var effective = target
-        if target == .fullFace, let side = headPose.sideShown { effective = .faceSide(side) }
+        if target == .fullFace, !brushActive, let side = headPose.sideShown { effective = .faceSide(side) }
 
         guard let focus = focusPoint(for: effective, faceTracker.points) else {
             send(scale: 1, focus: .center)
@@ -156,7 +172,7 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         }
         send(scale: zoomScale(for: effective), focus: .target(effective, focus))
     }
-  
+
     private func zoomScale(for target: ZoomTarget) -> CGFloat {
         guard case .faceSide = target else { return target.zoomScale }
         return 1 + (target.zoomScale - 1) * headPose.sideProgress
@@ -166,7 +182,7 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         switch target {
         case .fullFace:
             // Selagi sisi wajah masih memudar, fokus ikut turun halus sebelum benar-benar lepas
-            guard let side = headPose.sideShown else { return nil }
+            guard !brushActive, let side = headPose.sideShown else { return nil }
             return sideFocus(side, p)
         case .leftEye: return p.leftEye
         case .rightEye: return p.rightEye
@@ -181,7 +197,7 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         let dx = p.width * 0.08 * headPose.sideProgress
         return CGPoint(x: side == .left ? c.x - dx : c.x + dx, y: c.y)
     }
-  
+
     private func send(scale: CGFloat, focus: ZoomAnimator.Focus) {
         DispatchQueue.main.async { [animator] in animator.setGoal(scale: scale, focus: focus) }
     }

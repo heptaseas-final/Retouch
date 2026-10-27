@@ -10,7 +10,7 @@ import QuartzCore
 nonisolated final class HandPointDetector: @unchecked Sendable {
     private let pinchMax: CGFloat = 0.5          // jarak antar ujung jari / ukuran telapak
     private let minJointConfidence: Float = 0.25
-    private let tipExtension: CGFloat = 0.33    // perpanjangan ke ujung brush, x ukuran telapak
+    private let tipExtension: CGFloat = 0.4    // perpanjangan ke ujung brush, x ukuran telapak
 
     private let request: VNDetectHumanHandPoseRequest = {
         let r = VNDetectHumanHandPoseRequest()

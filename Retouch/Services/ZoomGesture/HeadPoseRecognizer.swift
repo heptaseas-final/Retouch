@@ -14,7 +14,7 @@ nonisolated struct HeadPoseRecognizer {
     var pitchSign = 1.0             // ganti -1 kalau menunduk tidak terdeteksi
     var isForeheadEnabled = false
     var holdRelease: TimeInterval = 0.8   // dahi nyangkut di zona hysteresis selama ini: lepas dan belajar ulang baseline
-    var blendFull = 25.0            // derajat, progress sisi wajah penuh (mulai naik dari turnExit)
+    var blendFull = 28.0            // derajat, progress sisi wajah penuh (mulai naik dari turnExit)
     var blendTau = 0.1              // detik, makin kecil makin cepat
 
     private(set) var current: ZoomTarget?

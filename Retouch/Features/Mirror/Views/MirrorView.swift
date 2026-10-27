@@ -16,7 +16,7 @@ struct MirrorView: View {
                     .ignoresSafeArea()
                     .animation(.easeInOut(duration: 0.25), value: viewModel.detector.edgeLightLevel)
                 cameraStateOverlay
-                luxLabel
+//                luxLabel
                 if GestureDebug.isEnabledGestureDebug {
                     GestureDebugOverlay(viewModel: viewModel)
                     GestureDebugDots(viewModel: viewModel)
