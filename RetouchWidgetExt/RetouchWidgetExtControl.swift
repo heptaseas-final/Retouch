@@ -10,7 +10,7 @@ import SwiftUI
 import AppIntents
 
 struct RetouchWidgetExtControl: ControlWidget {
-    static let kind = "com.timlu.Retouch.OpenRetouch"   // ganti sesuai bundle id lu
+    static let kind = "bsd.iosda.Retouch.RetouchWidgetExt"
 
     var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(kind: Self.kind) {
@@ -19,6 +19,6 @@ struct RetouchWidgetExtControl: ControlWidget {
             }
         }
         .displayName("Open Retouch")
-        .description("Buka Retouch langsung dari lockscreen.")
+        .description("Open Retouch directly from your lock screen.")
     }
 }

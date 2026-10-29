@@ -3,7 +3,7 @@ name: Retouch
 options:
   bundleIdPrefix: bsd.iosda
   deploymentTarget:
-    iOS: "26.6"
+    iOS: "26.0"
   developmentLanguage: en
   createIntermediateGroups: true
 
@@ -20,6 +20,7 @@ targets:
     platform: iOS
     sources:
       - path: Retouch
+      - path: RetouchWidgetExt/OpenRetouchIntent.swift
     dependencies:
       - target: RetouchWidgetExt
     settings:
@@ -39,9 +40,9 @@ targets:
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_CFBundleDisplayName: "Retouch"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_NSCameraUsageDescription: "Camera is used to track your face for the AR makeup tutorial."
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Microphone is used to listen to your 'next' and 'previous' voice commands."
-        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Speech recognition is used to understand your voice commands."
+        INFOPLIST_KEY_NSCameraUsageDescription: "Camera is used to show your face as a mirror and to detect hand gestures for zoom."
+        # INFOPLIST_KEY_NSMicrophoneUsageDescription: "Microphone is used to listen to your 'next' and 'previous' voice commands."
+        # INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Speech recognition is used to understand your voice commands."
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
 
@@ -84,13 +85,27 @@ targets:
     platform: iOS
     sources:
       - path: RetouchWidgetExt
+        excludes: ["Info.plist"]
+    info:
+      path: RetouchWidgetExt/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: bsd.iosda.Retouch.RetouchWidgetExt
-        PRODUCT_NAME: "RetouchWidgetExt"
+        PRODUCT_NAME: RetouchWidgetExt
+        MARKETING_VERSION: ${VERSION_NUMBER}
+        CURRENT_PROJECT_VERSION: ${BUILD_NUMBER}
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_NSExtension:
-          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        INFOPLIST_KEY_CFBundleDisplayName: "Retouch"
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SWIFT_VERSION: 5.0
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
 
 schemes:
   Retouch:
