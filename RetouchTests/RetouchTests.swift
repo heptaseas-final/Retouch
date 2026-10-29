@@ -1,6 +1,6 @@
 import Testing
-@testable import HiFi_v1
+@testable import Retouch
 
-struct HiFi_v1Tests {
+struct RetouchTests {
     @Test func example() { #expect(true) }
 }

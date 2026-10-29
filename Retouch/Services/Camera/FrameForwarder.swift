@@ -1,6 +1,6 @@
 //
 //  FrameForwarder.swift
-//  HiFi_v1
+//  Retouch
 //
 //  Created by Davin P on 26/10/26.
 //
@@ -8,7 +8,6 @@
 
 import CoreVideo
 
-/// Meneruskan frame kamera ke zoom gesture.
 nonisolated final class FrameForwarder: @unchecked Sendable {
     private let lock = NSLock()
     private var handler: (@Sendable (CVPixelBuffer) -> Void)?

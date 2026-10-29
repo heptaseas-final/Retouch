@@ -1,9 +1,7 @@
 import CoreImage
 import CoreImage.CIFilterBuiltins
-import Metal
 import QuartzCore
 
-/// Nilai tuning tetap untuk mode Enhanced (tidak adaptif terhadap cahaya).
 struct EnhanceTune {
     var detail = 0.18      // ketajaman halus (luminance only)
     var contrast = 0.25    // S-curve, hanya menggelapkan bayangan
@@ -15,7 +13,6 @@ struct EnhanceTune {
 }
 
 final class MirrorRenderer {
-    /// Edge light thickness the renderer eases toward (0 = off, 1 = thickest). Thread-safe.
     var targetLevel: Double {
         get { lock.withLock { _targetLevel } }
         set { lock.withLock { _targetLevel = min(max(newValue, 0), 1) } }
@@ -26,7 +23,7 @@ final class MirrorRenderer {
         set { lock.withLock { _flashColor = newValue } }
     }
 
-    /// Mode Enhanced. OFF (default) = tampilan seperti sebelumnya. Thread-safe.
+    /// enhanced mode off
     var enhancementOn: Bool {
         get { lock.withLock { _enhancementOn } }
         set { lock.withLock { _enhancementOn = newValue } }
@@ -36,10 +33,7 @@ final class MirrorRenderer {
     var maxFlashAlpha = 1.0
     var flashOnEasing = 0.4
     var flashOffEasing = 0.12
-    /// [FITUR] Thickest border as a fraction of the screen width. Kept small so the
-    /// camera view in the middle is never blocked.
     var maxThicknessFraction: CGFloat = 0.12
-    /// [FITUR] Share of the border's thickness that fades out toward the centre.
     var featherFraction: CGFloat = 0.4
     var faceDetectionInterval = 3
     var tune = EnhanceTune.fixed
@@ -55,11 +49,10 @@ final class MirrorRenderer {
     private let lock = NSLock()
     private var _targetLevel = 0.0
     private var _flashColor = CIColor(red: 1, green: 1, blue: 1)
-        private var _enhancementOn = false
+    private var _enhancementOn = false
     private var layer: CAMetalLayer?
     private var drawableSize: CGSize = .zero
-
-    // Hanya diakses dari thread render (analysisQueue, serial).
+    
     private var frameCount = 0
     private var flash = 0.0
     private var gradeCache: [ColorGrade: Data] = [:]
@@ -127,7 +120,7 @@ final class MirrorRenderer {
         let ext = frame.extent
         let outRect = CGRect(origin: .zero, size: size)
 
-        // 1. Aspect-fill (zoom ditangani tim lain di ZoomableCameraPreview, bukan di sini).
+        // Aspect-fill
         let fill = max(size.width / ext.width, size.height / ext.height)
         let visW = size.width / fill
         let visH = size.height / fill
@@ -142,7 +135,7 @@ final class MirrorRenderer {
             return img.transformed(by: CGAffineTransform(scaleX: scale, y: scale)).cropped(to: outRect)
         }
 
-        // 2. Resample Lanczos ke ukuran layar (dilewati kalau ~1:1).
+        // use lanczos scale transform
         if abs(scale - 1) > 0.01 {
             let f = CIFilter.lanczosScaleTransform()
             f.inputImage = img
@@ -251,10 +244,7 @@ final class MirrorRenderer {
         return f.outputImage ?? img
     }
 
-    // MARK: - Edge light (tidak berubah)
-
-    /// [FITUR] A border of `thickness` pixels along all four edges: solid on the outside,
-    /// fading to clear on the inside, so the middle of the camera view stays untouched.
+    // MARK: - Edge light
     private func edgeLight(size: CGSize, thickness t: CGFloat, color: CIColor) -> CIImage {
         guard t > 0.5 else { return CIImage.empty() }
         let solid = CIColor(red: color.red, green: color.green, blue: color.blue, alpha: maxFlashAlpha)

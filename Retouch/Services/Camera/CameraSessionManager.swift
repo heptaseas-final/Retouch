@@ -1,6 +1,6 @@
 //
 //  CameraSessionManager.swift
-//  HiFi_v1
+//  Retouch
 //
 //  Created by Davin P on 26/10/26.
 //
@@ -157,7 +157,6 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
     }
 
     private func lockFrameRate(_ device: AVCaptureDevice) {
-        // Pilih format dengan fps tertinggi (maks frameRate). Kamera depan biasanya mentok di 60 fps.
         let currentWidth = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription).width
         var best: (format: AVCaptureDevice.Format, fps: Double, widthGap: Int32)?
         for format in device.formats {

@@ -1,6 +1,6 @@
 //
 //  LightColorSwatch.swift
-//  HiFi_v1
+//  Retouch
 //
 //  Created by Davin P on 25/10/26.
 //
