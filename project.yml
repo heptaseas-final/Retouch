@@ -20,6 +20,8 @@ targets:
     platform: iOS
     sources:
       - path: Retouch
+    dependencies:
+      - target: RetouchWidgetExt
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: bsd.iosda.Retouch
@@ -76,12 +78,26 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: bsd.iosda.RetouchUITests
         GENERATE_INFOPLIST_FILE: YES
+  
+  RetouchWidgetExt:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: RetouchWidgetExt
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: bsd.iosda.Retouch.RetouchWidgetExt
+        PRODUCT_NAME: "RetouchWidgetExt"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
 
 schemes:
   Retouch:
     build:
       targets:
         Retouch: all
+        RetouchWidgetExt: [run, test, profile, analyze, archive]
     test:
       config: Debug
       targets: [RetouchTests, RetouchUITests]
