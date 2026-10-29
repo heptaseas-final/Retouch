@@ -1,5 +1,5 @@
 //
-//  OnboardingMedia.swift
+//  OnboardingPage.swift
 //  Retouch
 //
 //  Created by Gabriella Angelina Widjaja on 29/10/26.
