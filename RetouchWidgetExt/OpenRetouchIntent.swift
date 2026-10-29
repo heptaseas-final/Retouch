@@ -9,7 +9,7 @@ import AppIntents
 
 struct OpenRetouchIntent: AppIntent {
     static let title: LocalizedStringResource = "Open Retouch"
-    static let openAppWhenRun = true
+    static var supportedModes: IntentModes { .foreground }
 
     func perform() async throws -> some IntentResult { .result() }
 }
