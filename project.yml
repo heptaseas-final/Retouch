@@ -1,0 +1,122 @@
+name: Retouch
+
+options:
+  bundleIdPrefix: bsd.iosda
+  deploymentTarget:
+    iOS: "26.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+
+settings:
+  base:
+    DEVELOPMENT_TEAM: Y2U32BVMN3
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+
+targets:
+  Retouch:
+    type: application
+    platform: iOS
+    sources:
+      - path: Retouch
+      - path: RetouchWidgetExt/OpenRetouchIntent.swift
+    dependencies:
+      - target: RetouchWidgetExt
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: bsd.iosda.Retouch
+        PRODUCT_NAME: "Retouch: The Better Mirror"
+        MARKETING_VERSION: ${VERSION_NUMBER}
+        CURRENT_PROJECT_VERSION: ${BUILD_NUMBER}
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1"
+        ENABLE_PREVIEWS: YES
+
+        # Info.plist
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        INFOPLIST_KEY_CFBundleDisplayName: "Retouch"
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_NSCameraUsageDescription: "Camera is used to show your face as a mirror and to detect hand gestures for zoom."
+        # INFOPLIST_KEY_NSMicrophoneUsageDescription: "Microphone is used to listen to your 'next' and 'previous' voice commands."
+        # INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Speech recognition is used to understand your voice commands."
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
+
+        # Assets
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+
+        # Swift
+        SWIFT_VERSION: 5.0
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+        STRING_CATALOG_GENERATE_SYMBOLS: YES
+
+  RetouchTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [RetouchTests]
+    dependencies:
+      - target: Retouch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: bsd.iosda.RetouchTests
+        GENERATE_INFOPLIST_FILE: YES
+
+  RetouchUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [RetouchUITests]
+    dependencies:
+      - target: Retouch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: bsd.iosda.RetouchUITests
+        GENERATE_INFOPLIST_FILE: YES
+  
+  RetouchWidgetExt:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: RetouchWidgetExt
+        excludes: ["Info.plist"]
+    info:
+      path: RetouchWidgetExt/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: bsd.iosda.Retouch.RetouchWidgetExt
+        PRODUCT_NAME: RetouchWidgetExt
+        MARKETING_VERSION: ${VERSION_NUMBER}
+        CURRENT_PROJECT_VERSION: ${BUILD_NUMBER}
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: "Retouch"
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SWIFT_VERSION: 5.0
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+
+schemes:
+  Retouch:
+    build:
+      targets:
+        Retouch: all
+        RetouchWidgetExt: [run, test, profile, analyze, archive]
+    test:
+      config: Debug
+      targets: [RetouchTests, RetouchUITests]
+    run:
+      config: Debug
+    archive:
+      config: Release
