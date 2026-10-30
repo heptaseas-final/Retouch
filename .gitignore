@@ -1,7 +1,0 @@
-xcuserdata/
-*.xcuserstate
-.DS_Store
-DerivedData/
-build/
-# XcodeGen: generate with `xcodegen generate`
-*.xcodeproj
