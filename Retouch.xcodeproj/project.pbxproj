@@ -124,7 +124,7 @@
 		0483F7F2FAE907E6D605D1D9 /* CameraSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraSessionManager.swift; sourceTree = "<group>"; };
 		04FFE114260CBD1E7F7BBA2E /* LightColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightColor.swift; sourceTree = "<group>"; };
 		0822E17762FAA50A1D1854E2 /* RetouchWidgetExtBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetouchWidgetExtBundle.swift; sourceTree = "<group>"; };
-		087E680C3D422B36064C7554 /* RetouchUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RetouchUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		087E680C3D422B36064C7554 /* RetouchUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = RetouchUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1576F97C26C923F689CC87AF /* HandPointDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandPointDetector.swift; sourceTree = "<group>"; };
 		1CCB015A712D4257B2B9AF00 /* GestureDebug.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GestureDebug.swift; sourceTree = "<group>"; };
 		1FA579902CE8DDB6B17E0491 /* FaceLandmarkDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FaceLandmarkDetector.swift; sourceTree = "<group>"; };
@@ -144,13 +144,13 @@
 		62189653E29C3ADB61E51609 /* MirrorRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirrorRenderer.swift; sourceTree = "<group>"; };
 		63086871DFAC6408E9264887 /* RetouchWidgetExtControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetouchWidgetExtControl.swift; sourceTree = "<group>"; };
 		69DC9F0F2BE581E66293B2BE /* EdgeLightOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeLightOverlay.swift; sourceTree = "<group>"; };
-		69EC082892D1822FA6E7E140 /* Retouch: The Better Mirror.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Retouch: The Better Mirror.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		69EC082892D1822FA6E7E140 /* Retouch.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Retouch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B7717F5A277D74D9E58596C /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
-		6BB19F329A93DFE24BD829F0 /* auto-brightness.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "auto-brightness.mp4"; sourceTree = "<group>"; };
+		6BB19F329A93DFE24BD829F0 /* auto-brightness.mp4 */ = {isa = PBXFileReference; path = "auto-brightness.mp4"; sourceTree = "<group>"; };
 		6E5D12EC0E5CA7AC3B2F27C0 /* GestureDebugDots.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GestureDebugDots.swift; sourceTree = "<group>"; };
 		70EA8859F75BA6A015FBA391 /* ActionButtonRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionButtonRow.swift; sourceTree = "<group>"; };
 		7953DE40CFA541BB05412508 /* MirrorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirrorView.swift; sourceTree = "<group>"; };
-		7956B6BD82D39C71C82E9D04 /* RetouchWidgetExt.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RetouchWidgetExt.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		7956B6BD82D39C71C82E9D04 /* RetouchWidgetExt.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = RetouchWidgetExt.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		84D22734145ACCC880D60D72 /* ZoomPartBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomPartBar.swift; sourceTree = "<group>"; };
 		884ECD82E797882D26992E67 /* BrightnessController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrightnessController.swift; sourceTree = "<group>"; };
 		8D29A53DE549FB6D14E22A1B /* AppIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIntent.swift; sourceTree = "<group>"; };
@@ -162,7 +162,7 @@
 		A031395577AF49532C0F3149 /* ZoomAnimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomAnimator.swift; sourceTree = "<group>"; };
 		A38F5AEEA881EF92C0D968BA /* GestureDebugOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GestureDebugOverlay.swift; sourceTree = "<group>"; };
 		A51AA337548B3DF9EA186900 /* ColorGrade.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorGrade.swift; sourceTree = "<group>"; };
-		A73050697629A461A47600AC /* RetouchTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RetouchTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A73050697629A461A47600AC /* RetouchTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = RetouchTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A77AD848B79BD596C8CA727E /* CoordinateConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoordinateConverter.swift; sourceTree = "<group>"; };
 		A805ECA3B74F2428C766735A /* AutoLightDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoLightDetector.swift; sourceTree = "<group>"; };
 		AA1FF727A3CF8EB97FACFFF2 /* GlassCircleButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCircleButton.swift; sourceTree = "<group>"; };
@@ -172,14 +172,14 @@
 		B3BA30BA730CAF74E1BD87C9 /* ColorTemperatureTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorTemperatureTracker.swift; sourceTree = "<group>"; };
 		B47A947C8A6CB01D82085AD1 /* HandProximityRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandProximityRecognizer.swift; sourceTree = "<group>"; };
 		B609E81284957FCF166A037E /* LightConditionClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightConditionClassifier.swift; sourceTree = "<group>"; };
-		BA8F2BE3E1AF0E2B319BB406 /* head-turn.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "head-turn.mp4"; sourceTree = "<group>"; };
+		BA8F2BE3E1AF0E2B319BB406 /* head-turn.mp4 */ = {isa = PBXFileReference; path = "head-turn.mp4"; sourceTree = "<group>"; };
 		BB60371F13D630BFD2342759 /* GripObservation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GripObservation.swift; sourceTree = "<group>"; };
 		C0FEABCD6C2815D3A26B24FE /* RetouchWidgetExt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetouchWidgetExt.swift; sourceTree = "<group>"; };
 		C7BDB309E4782265C281DDF5 /* HeadPoseRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadPoseRecognizer.swift; sourceTree = "<group>"; };
 		CB5EA6B16B3EE0E179A5F6EB /* ZoomDebugInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomDebugInfo.swift; sourceTree = "<group>"; };
 		CC005930264F68B0A8EFA314 /* FaceTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FaceTracker.swift; sourceTree = "<group>"; };
 		CC7CC7216FA70B865E36BE5A /* FaceObservation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FaceObservation.swift; sourceTree = "<group>"; };
-		CCC5ACE4B9B9BD28582F882E /* auto-zoom.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "auto-zoom.mp4"; sourceTree = "<group>"; };
+		CCC5ACE4B9B9BD28582F882E /* auto-zoom.mp4 */ = {isa = PBXFileReference; path = "auto-zoom.mp4"; sourceTree = "<group>"; };
 		CF47FC12C6C2CE74D8F2D3CF /* OpenRetouchIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRetouchIntent.swift; sourceTree = "<group>"; };
 		D377E213D5AB72D758A78374 /* RetouchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetouchTests.swift; sourceTree = "<group>"; };
 		D7219CF76B771E1F3F1EEB07 /* LightColorSwatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightColorSwatch.swift; sourceTree = "<group>"; };
@@ -425,7 +425,7 @@
 		EBD35036C3E8356FC0A1D0E8 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				69EC082892D1822FA6E7E140 /* Retouch: The Better Mirror.app */,
+				69EC082892D1822FA6E7E140 /* Retouch.app */,
 				A73050697629A461A47600AC /* RetouchTests.xctest */,
 				087E680C3D422B36064C7554 /* RetouchUITests.xctest */,
 				7956B6BD82D39C71C82E9D04 /* RetouchWidgetExt.appex */,
@@ -535,7 +535,7 @@
 			packageProductDependencies = (
 			);
 			productName = Retouch;
-			productReference = 69EC082892D1822FA6E7E140 /* Retouch: The Better Mirror.app */;
+			productReference = 69EC082892D1822FA6E7E140 /* Retouch.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -545,7 +545,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 2710;
+				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					1540AD11DE9B509E8AC099F1 = {
 						DevelopmentTeam = Y2U32BVMN3;
@@ -557,7 +557,6 @@
 					};
 					B07A2FAEA483B4A9643FC4C0 = {
 						DevelopmentTeam = Y2U32BVMN3;
-						TestTargetID = D65993A029F777865376CDD6;
 					};
 					D65993A029F777865376CDD6 = {
 						DevelopmentTeam = Y2U32BVMN3;
@@ -786,7 +785,6 @@
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -847,7 +845,6 @@
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
@@ -867,7 +864,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = bsd.iosda.RetouchTests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Retouch: The Better Mirror.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Retouch: The Better Mirror";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Retouch.app/Retouch";
 			};
 			name = Debug;
 		};
@@ -912,8 +909,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = bsd.iosda.Retouch;
-				PRODUCT_MODULE_NAME = Retouch;
-				PRODUCT_NAME = "Retouch: The Better Mirror";
+				PRODUCT_NAME = Retouch;
 				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -975,8 +971,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = bsd.iosda.Retouch;
-				PRODUCT_MODULE_NAME = Retouch;
-				PRODUCT_NAME = "Retouch: The Better Mirror";
+				PRODUCT_NAME = Retouch;
 				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -1018,7 +1013,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = bsd.iosda.RetouchTests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Retouch: The Better Mirror.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Retouch: The Better Mirror";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Retouch.app/Retouch";
 			};
 			name = Release;
 		};
