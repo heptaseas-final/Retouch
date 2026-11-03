@@ -11,11 +11,11 @@ nonisolated struct FacePoints {
     var leftEye: CGPoint?
     var rightEye: CGPoint?
     var lips: CGPoint?
-    var forehead: CGPoint?
     var center: CGPoint?
     var width: CGFloat = 0
+    /// Jarak antar mata di layar, dipelajari dari landmark. Penggaris semua jarak gesture.
+    var scale: CGFloat = 0
 
-    /// Fitur yang bisa didekati tangan
     var handTargets: [(ZoomTarget, CGPoint)] {
         var result: [(ZoomTarget, CGPoint)] = []
         if let p = leftEye { result.append((.leftEye, p)) }

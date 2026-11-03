@@ -13,12 +13,11 @@ struct GestureDebugOverlay: View {
         let info = viewModel.debugInfo
         VStack(alignment: .leading, spacing: 2) {
             Text("target : \(info.target)")
-            Text("jarak  : L \(fmt(info.distLeftEye)) | R \(fmt(info.distRightEye)) | bibir \(fmt(info.distLips))")
+            Text("jarak  : L \(fmt(info.distLeftEye)) | R \(fmt(info.distRightEye)) | bibir \(fmt(info.distLips)) (x jarak mata)")
             Text("tangan : lihat \(info.handsSeen) | jepit \(info.gripCount)")
             Text("jepit  : rasio \(fmt(info.pinchRatio)) | yakin \(String(format: "%.2f", info.handConfidence))")
-            Text("kepala : yaw \(Int(info.yaw))° | turun \(String(format: "%.3f", info.down)) | \(info.headState)")
-            Text("rasio  : \(String(format: "%.3f", info.ratio)) | dasar \(String(format: "%.3f", info.baseline))")
-            Text("wajah  : tinggi/lebar \(String(format: "%.3f", info.faceAspect))")
+            Text("kepala : yaw \(angle(info.yaw)) | lurus \(angle(info.yawBaseline)) | puncak \(angle(info.turnPeak)) | \(info.headState)")
+            Text("wajah  : jarak mata \(String(format: "%.0f", info.eyeSpan))px | tinggi/lebar \(String(format: "%.3f", info.faceAspect))")
             Text(String(format: "tahan  : %.1fs / %.1fs", info.idleTime, info.exitHold))
             Text("fps    : kamera \(info.fps) | tangan \(info.handFps)")
         }
@@ -34,5 +33,9 @@ struct GestureDebugOverlay: View {
 
     private func fmt(_ value: CGFloat?) -> String {
         value.map { String(format: "%.2f", $0) } ?? "-"
+    }
+
+    private func angle(_ value: Double) -> String {
+        value.isFinite ? "\(Int(value.rounded()))°" : "-"
     }
 }

@@ -26,6 +26,7 @@ nonisolated final class ZoomAnimator: NSObject, @unchecked Sendable {
     private let panTau: CGFloat = 0.12
     private let lockZone: CGFloat = 0.12
     private let maxAutoZoom: CGFloat = 1.3
+    private let scaleLock = NSLock()
 
     private var viewSize: CGSize = .zero
     private var goalScale: CGFloat = 1
@@ -39,6 +40,27 @@ nonisolated final class ZoomAnimator: NSObject, @unchecked Sendable {
     private var panY: CGFloat = 0
     private var lastState = ZoomState()
     private var link: CADisplayLink?
+    private var shownScale: CGFloat = 1
+    
+    func reset() {
+        goalScale = 1
+        currentScale = 1
+        panX = 0
+        panY = 0
+        mode = .none
+        lockedFocus = nil
+        isRecentering = false
+        focusFilterX.reset()
+        focusFilterY.reset()
+        scaleLock.lock(); shownScale = 1; scaleLock.unlock()
+        lastState = ZoomState()
+        onChange?(lastState)
+    }
+    
+    var displayedScale: CGFloat {
+        scaleLock.lock(); defer { scaleLock.unlock() }
+        return shownScale
+    }
 
     func start() {
         guard link == nil else { return }
@@ -120,6 +142,7 @@ nonisolated final class ZoomAnimator: NSObject, @unchecked Sendable {
         }
         let tau = scaleGoal > currentScale ? zoomInTau : zoomOutTau
         currentScale += (scaleGoal - currentScale) * (1 - exp(-dt / tau))
+        scaleLock.lock(); shownScale = currentScale; scaleLock.unlock()
 
         let maxX = (currentScale - 1) * size.width / 2
         let maxY = (currentScale - 1) * size.height / 2

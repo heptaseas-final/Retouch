@@ -17,4 +17,6 @@ nonisolated protocol ZoomGestureServicing: AnyObject, Sendable {
     func setManualTarget(_ target: ZoomTarget)
     func pinchChanged(_ magnification: CGFloat)
     func pinchEnded()
+    func resetSession()
+    func setLearningPaused(_ paused: Bool)
 }

@@ -24,25 +24,26 @@ nonisolated final class HandPointDetector: @unchecked Sendable {
     private var doneCount = 0
     private var windowStart = CACurrentMediaTime()
     private var rate = 0
+    private var generation = 0
 
     var latest: HandScan { lock.withLock { cache } }
     var detectionsPerSecond: Int { lock.withLock { rate } }
 
     /// Frame dilewati kalau proses sebelumnya belum selesai
     func submit(_ pixelBuffer: CVPixelBuffer) {
-        let skip = lock.withLock { () -> Bool in
-            if busy { return true }
+        let gen = lock.withLock { () -> Int? in
+            if busy { return nil }
             busy = true
-            return false
+            return generation
         }
-        guard !skip else { return }
+        guard let gen else { return }
 
         let aspect = CGFloat(CVPixelBufferGetHeight(pixelBuffer)) / CGFloat(CVPixelBufferGetWidth(pixelBuffer))
         nonisolated(unsafe) let buffer = pixelBuffer
         queue.async { [self] in
             let scan = detect(buffer, aspect: aspect)
             lock.withLock {
-                cache = scan
+                if gen == generation { cache = scan }
                 busy = false
                 doneCount += 1
                 let now = CACurrentMediaTime()
@@ -52,6 +53,13 @@ nonisolated final class HandPointDetector: @unchecked Sendable {
                     windowStart = now
                 }
             }
+        }
+    }
+    
+    func reset() {
+        lock.withLock {
+            cache = HandScan()
+            generation += 1
         }
     }
 

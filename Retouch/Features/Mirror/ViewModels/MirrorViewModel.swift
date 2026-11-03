@@ -85,6 +85,16 @@ final class MirrorViewModel {
     func setViewSize(_ size: CGSize) { zoomGesture.setViewSize(size) }
     func pinchChanged(_ magnification: CGFloat) { zoomGesture.pinchChanged(magnification) }
     func pinchEnded() { zoomGesture.pinchEnded() }
+    
+    func cameraStateDidChange(from old: CameraState, to new: CameraState) {
+        if new == .running, old != .running {
+            zoomGesture.resetSession()
+        }
+    }
+
+    func lightingSheetDidChange(_ isPresented: Bool) {
+        zoomGesture.setLearningPaused(isPresented)
+    }
 
     // MARK: - Lighting
     func showLighting() { isLightingSheetPresented = true }
