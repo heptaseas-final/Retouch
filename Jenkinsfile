@@ -9,6 +9,7 @@ pipeline {
     }
 
     environment {
+        PATH = "/opt/homebrew/bin:/usr/local/bin:${env.PATH}"
         PROJECT = 'Retouch.xcodeproj'
         SCHEME = 'Retouch'
         DESTINATION = 'platform=iOS Simulator,name=iPhone 17,OS=latest'
