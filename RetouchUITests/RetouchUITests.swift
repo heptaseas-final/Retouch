@@ -1,5 +1,8 @@
 import XCTest
 
 final class RetouchUITests: XCTestCase {
-    func testLaunch() { XCUIApplication().launch() }
+    func testLaunch() {
+        let app = XCUIApplication()
+        app.launch()
+    }
 }
