@@ -40,7 +40,7 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES">
+      shouldUseLaunchSchemeArgsEnv = "NO">
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
@@ -50,6 +50,13 @@
             ReferencedContainer = "container:Retouch.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
+      <EnvironmentVariables>
+         <EnvironmentVariable
+            key = "OS_ACTIVITY_MODE"
+            value = "disable"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+      </EnvironmentVariables>
       <Testables>
          <TestableReference
             skipped = "NO"
@@ -90,7 +97,6 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "D65993A029F777865376CDD6"
             BuildableName = "Retouch: The Better Mirror.app"
-            BlueprintName = "Retouch"
             ReferencedContainer = "container:Retouch.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
