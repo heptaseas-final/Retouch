@@ -10,9 +10,19 @@ struct GlassStyleModifier<S: Shape>: ViewModifier {
     let shape: S
 
     func body(content: Content) -> some View {
-        content.glassEffect(glass, in: shape)
+        if #available(iOS 26, *) {
+            content.glassEffect(glass, in: shape)
+        } else {
+            content.background {
+                shape.fill(.ultraThinMaterial)
+                if GlassConfig.variant == .white {
+                    shape.fill(.white.opacity(0.25))
+                }
+            }
+        }
     }
 
+    @available(iOS 26, *)
     private var glass: Glass {
         switch GlassConfig.variant {
         case .white: .regular.tint(.white.opacity(0.5))
