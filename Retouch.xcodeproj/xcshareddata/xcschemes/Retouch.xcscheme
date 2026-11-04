@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "D65993A029F777865376CDD6"
-               BuildableName = "Retouch: The Better Mirror.app"
+               BuildableName = "Retouch.app"
                BlueprintName = "Retouch"
                ReferencedContainer = "container:Retouch.xcodeproj">
             </BuildableReference>
@@ -45,7 +45,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "D65993A029F777865376CDD6"
-            BuildableName = "Retouch: The Better Mirror.app"
+            BuildableName = "Retouch.app"
             BlueprintName = "Retouch"
             ReferencedContainer = "container:Retouch.xcodeproj">
          </BuildableReference>
@@ -89,7 +89,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "D65993A029F777865376CDD6"
-            BuildableName = "Retouch: The Better Mirror.app"
+            BuildableName = "Retouch.app"
             BlueprintName = "Retouch"
             ReferencedContainer = "container:Retouch.xcodeproj">
          </BuildableReference>
@@ -106,7 +106,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "D65993A029F777865376CDD6"
-            BuildableName = "Retouch: The Better Mirror.app"
+            BuildableName = "Retouch.app"
             BlueprintName = "Retouch"
             ReferencedContainer = "container:Retouch.xcodeproj">
          </BuildableReference>

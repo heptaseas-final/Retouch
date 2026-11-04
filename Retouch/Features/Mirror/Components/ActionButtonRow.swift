@@ -18,7 +18,7 @@ struct ActionButtonRow: View {
             GlassIconButton(systemName: "arrow.up.left.and.down.right.magnifyingglass",
                             color: isZoomBarVisible ? .appInactive : .appMagenta,
                             action: onZoom)
-            GlassIconButton(systemName: "microphone.fill", action: onMic)
+//            GlassIconButton(systemName: "microphone.fill", action: onMic)
         }
     }
 }

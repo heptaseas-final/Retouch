@@ -13,6 +13,7 @@ settings:
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
     LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    
 
 targets:
   Retouch:
@@ -26,7 +27,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: bsd.iosda.Retouch
-        PRODUCT_NAME: "Retouch: The Better Mirror"
+        PRODUCT_NAME: "Retouch"
         MARKETING_VERSION: ${VERSION_NUMBER}
         CURRENT_PROJECT_VERSION: ${BUILD_NUMBER}
         CODE_SIGN_STYLE: Automatic

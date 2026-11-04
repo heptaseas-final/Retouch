@@ -36,7 +36,7 @@ struct OnboardingPage: Identifiable {
             isLastPage: false
         ),
         OnboardingPage(
-            title: "Use the buttons to manually adjust zoom and lighting",
+            title: "Use the buttons to manually adjust zoom and lighting!",
             media: .image(assetName: "manual-settings"),
             isLastPage: true
         )
