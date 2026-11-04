@@ -1,9 +1,3 @@
-//
-//  FaceObservation.swift
-//  Retouch
-//
-//  Created by Davin P on 25/10/26.
-//
 import CoreGraphics
 
 nonisolated struct FaceObservation {
@@ -14,4 +8,5 @@ nonisolated struct FaceObservation {
     var width: CGFloat
     var yaw: Double          // derajat; NaN kalau landmark tidak cukup / saling bertentangan
     var aspect: Double       // tinggi / lebar kotak wajah di ruang piksel
+    var pitch: Double = .nan // derajat, positif = mendongak; NaN kalau landmark tidak cukup (Tahap 5)
 }

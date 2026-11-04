@@ -96,6 +96,12 @@ final class MirrorViewModel {
         zoomGesture.setLearningPaused(isPresented)
     }
 
+    // MARK: - Alat uji auto zoom (debug overlay)
+    func zoomLogSummary() -> ZoomLogSummary { zoomGesture.zoomLogSummary() }
+    func zoomLogText() -> String { zoomGesture.zoomLogText() }
+    func resetZoomLearning() { zoomGesture.resetLearning() }
+    func clearZoomLog() { zoomGesture.clearZoomLog() }
+
     // MARK: - Lighting
     func showLighting() { isLightingSheetPresented = true }
 }

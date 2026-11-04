@@ -1,9 +1,3 @@
-//
-//  HandPointDetector.swift
-//  Retouch
-//
-//  Created by Davin P on 25/10/26.
-//
 import Vision
 import QuartzCore
 
@@ -20,30 +14,44 @@ nonisolated final class HandPointDetector: @unchecked Sendable {
     private let queue = DispatchQueue(label: "zoom.hand")
     private let lock = NSLock()
     private var busy = false
+    private var gate = RateGate()
     private var cache = HandScan()
+    private var cacheTime = Date.distantPast
+    private var sequence = 0
     private var doneCount = 0
     private var windowStart = CACurrentMediaTime()
     private var rate = 0
     private var generation = 0
 
+    /// Hasil terakhir beserta nomor urut dan cap waktu. Nomor urut naik setiap ada hasil deteksi baru.
+    var snapshot: DetectionSnapshot<HandScan> {
+        lock.withLock { DetectionSnapshot(value: cache, sequence: sequence, timestamp: cacheTime) }
+    }
+
     var latest: HandScan { lock.withLock { cache } }
     var detectionsPerSecond: Int { lock.withLock { rate } }
 
-    /// Frame dilewati kalau proses sebelumnya belum selesai
-    func submit(_ pixelBuffer: CVPixelBuffer) {
+    /// Frame dilewati kalau proses sebelumnya belum selesai atau belum waktunya (lihat `minInterval`)
+    func submit(_ pixelBuffer: CVPixelBuffer, minInterval: TimeInterval = 0) {
+        let mediaNow = CACurrentMediaTime()
         let gen = lock.withLock { () -> Int? in
-            if busy { return nil }
+            if busy || !gate.allow(now: mediaNow, interval: minInterval) { return nil }
             busy = true
             return generation
         }
         guard let gen else { return }
 
+        let stamp = Date()
         let aspect = CGFloat(CVPixelBufferGetHeight(pixelBuffer)) / CGFloat(CVPixelBufferGetWidth(pixelBuffer))
         nonisolated(unsafe) let buffer = pixelBuffer
         queue.async { [self] in
             let scan = detect(buffer, aspect: aspect)
             lock.withLock {
-                if gen == generation { cache = scan }
+                if gen == generation {
+                    cache = scan
+                    cacheTime = stamp
+                    sequence += 1
+                }
                 busy = false
                 doneCount += 1
                 let now = CACurrentMediaTime()
@@ -55,7 +63,7 @@ nonisolated final class HandPointDetector: @unchecked Sendable {
             }
         }
     }
-    
+
     func reset() {
         lock.withLock {
             cache = HandScan()
@@ -64,7 +72,7 @@ nonisolated final class HandPointDetector: @unchecked Sendable {
     }
 
     private func detect(_ pixelBuffer: CVPixelBuffer, aspect: CGFloat) -> HandScan {
-        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .leftMirrored)
+        let handler = AnalysisImage.handler(for: pixelBuffer)
         try? handler.perform([request])
         var scan = HandScan()
         guard let results = request.results else { return scan }

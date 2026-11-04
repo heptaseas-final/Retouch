@@ -1,9 +1,3 @@
-//
-//  GestureDebugOverlay.swift
-//  Retouch
-//
-//  Created by Davin P on 26/10/26.
-//
 import SwiftUI
 
 struct GestureDebugOverlay: View {
@@ -11,9 +5,28 @@ struct GestureDebugOverlay: View {
 
     var body: some View {
         let info = viewModel.debugInfo
+        VStack(alignment: .leading, spacing: 6) {
+            infoText(info)
+                .allowsHitTesting(false)
+            ZoomLogDebugSection(
+                summary: { viewModel.zoomLogSummary() },
+                exportText: { viewModel.zoomLogText() },
+                resetLearning: { viewModel.resetZoomLearning() },
+                clearLog: { viewModel.clearZoomLog() }
+            )
+        }
+        .foregroundStyle(.white)
+        .padding(8)
+        .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.top, 8)
+        .padding(.leading, 16)
+    }
+
+    private func infoText(_ info: ZoomDebugInfo) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("target : \(info.target)")
-            Text("jarak  : L \(fmt(info.distLeftEye)) | R \(fmt(info.distRightEye)) | bibir \(fmt(info.distLips)) (x jarak mata)")
+            Text("jarak  : L \(fmt(info.distLeftEye)) | R \(fmt(info.distRightEye)) | bibir \(fmt(info.distLips)) (x lebar wajah)")
             Text("tangan : lihat \(info.handsSeen) | jepit \(info.gripCount)")
             Text("jepit  : rasio \(fmt(info.pinchRatio)) | yakin \(String(format: "%.2f", info.handConfidence))")
             Text("kepala : yaw \(angle(info.yaw)) | lurus \(angle(info.yawBaseline)) | puncak \(angle(info.turnPeak)) | \(info.headState)")
@@ -22,13 +35,6 @@ struct GestureDebugOverlay: View {
             Text("fps    : kamera \(info.fps) | tangan \(info.handFps)")
         }
         .font(.system(size: 10, design: .monospaced))
-        .foregroundStyle(.white)
-        .padding(8)
-        .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 8))
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.top, 8)
-        .padding(.leading, 16)
-        .allowsHitTesting(false)
     }
 
     private func fmt(_ value: CGFloat?) -> String {

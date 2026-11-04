@@ -1,12 +1,8 @@
-//
-//  FaceLandmarkDetector.swift
-//  Retouch
-//
-//  Created by Davin P on 25/10/26.
-//
 import Vision
+import QuartzCore
 
-/// Deteksi wajah (mata, bibir, dahi, perkiraan sudut kepala). Jalan async, frame dilewati kalau masih sibuk.
+/// Deteksi wajah (mata, bibir, dahi, perkiraan sudut kepala). Jalan async, frame dilewati kalau masih sibuk
+/// atau belum waktunya (laju dibatasi lewat `minInterval`).
 nonisolated final class FaceLandmarkDetector: @unchecked Sendable {
     private let request = VNDetectFaceLandmarksRequest()
     private let queue = DispatchQueue(label: "zoom.face")
@@ -14,35 +10,45 @@ nonisolated final class FaceLandmarkDetector: @unchecked Sendable {
     private let cheekGain = 0.6
     private let lock = NSLock()
     private var busy = false
+    private var gate = RateGate()
     private var cache: FaceObservation?
+    private var cacheTime = Date.distantPast
+    private var sequence = 0
 
-    var latest: FaceObservation? {
+    /// Hasil terakhir beserta nomor urut dan cap waktu. Nomor urut naik setiap ada hasil deteksi baru.
+    var snapshot: DetectionSnapshot<FaceObservation?> {
         lock.lock()
         defer { lock.unlock() }
-        return cache
+        return DetectionSnapshot(value: cache, sequence: sequence, timestamp: cacheTime)
     }
-    
+
+    var latest: FaceObservation? { snapshot.value }
+
     func reset() {
         lock.lock()
         cache = nil
         lock.unlock()
     }
 
-    func submit(_ pixelBuffer: CVPixelBuffer) {
+    func submit(_ pixelBuffer: CVPixelBuffer, minInterval: TimeInterval = 0) {
+        let mediaNow = CACurrentMediaTime()
         lock.lock()
-        let skip = busy
+        let skip = busy || !gate.allow(now: mediaNow, interval: minInterval)
         if !skip { busy = true }
         lock.unlock()
         guard !skip else { return }
 
+        let stamp = Date()
         let aspect = CGFloat(CVPixelBufferGetHeight(pixelBuffer)) / CGFloat(CVPixelBufferGetWidth(pixelBuffer))
         nonisolated(unsafe) let buffer = pixelBuffer
         queue.async { [self] in
-            let handler = VNImageRequestHandler(cvPixelBuffer: buffer, orientation: .leftMirrored)
+            let handler = AnalysisImage.handler(for: buffer)
             try? handler.perform([request])
             let face = parse(aspect: aspect)
             lock.lock()
             cache = face
+            cacheTime = stamp
+            sequence += 1
             busy = false
             lock.unlock()
         }
@@ -81,6 +87,14 @@ nonisolated final class FaceLandmarkDetector: @unchecked Sendable {
                               contour: contour, aspect: aspect)
         }
 
+        // Pitch (dongak) juga perkiraan dari landmark. NaN kalau landmark kurang atau kepala terlalu menoleh
+        var pitch = Double.nan
+        if ZoomTuning.pitchEnabled, let l = leftEye, let r = rightEye,
+           !(yaw.isFinite && abs(yaw) > ZoomTuning.pitchMaxYaw) {
+            pitch = estimatePitch(leftEye: l, rightEye: r, nose: center(lm.nose),
+                                  mouth: center(lm.outerLips), aspect: aspect)
+        }
+
         return FaceObservation(
             leftEye: leftEye,
             rightEye: rightEye,
@@ -88,10 +102,34 @@ nonisolated final class FaceLandmarkDetector: @unchecked Sendable {
             center: CGPoint(x: box.midX, y: box.midY),
             width: box.width,
             yaw: yaw,
-            aspect: Double(box.height / (box.width * aspect))
+            aspect: Double(box.height / (box.width * aspect)),
+            pitch: pitch
         )
     }
-    
+
+    /// Hidung menonjol ke depan, jadi saat dagu naik ujung hidung terlihat bergeser ke arah mata.
+    /// Diukur sebagai posisi hidung di antara garis mata dan bibir, searah sumbu "turun" wajah
+    /// (tegak lurus garis mata, jadi ikut benar kalau kepala miring). Positif = mendongak.
+    private func estimatePitch(leftEye l: CGPoint, rightEye r: CGPoint, nose: CGPoint?,
+                               mouth: CGPoint?, aspect: CGFloat) -> Double {
+        guard let nose, let mouth else { return .nan }
+        func iso(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x * aspect, y: p.y) }
+        let le = iso(l), re = iso(r)
+        let dist = hypot(re.x - le.x, re.y - le.y)
+        guard dist > 0 else { return .nan }
+        let ux = (re.x - le.x) / dist, uy = (re.y - le.y) / dist
+        let vx = uy, vy = -ux                       // arah turun (koordinat Vision: y naik)
+        let mx = (le.x + re.x) / 2, my = (le.y + re.y) / 2
+        func down(_ p: CGPoint) -> CGFloat {
+            let q = iso(p)
+            return (q.x - mx) * vx + (q.y - my) * vy
+        }
+        let noseDown = down(nose), mouthDown = down(mouth)
+        guard mouthDown > dist * 0.4, noseDown > 0 else { return .nan }
+        let ratio = Double(noseDown / mouthDown)
+        return atan((ZoomTuning.pitchNominalRatio - ratio) / ZoomTuning.pitchNoseGain) * 180 / .pi
+    }
+
     private func estimateYaw(leftEye l: CGPoint, rightEye r: CGPoint, nose: CGPoint?,
                              contour: [CGPoint], aspect: CGFloat) -> Double {
         func iso(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x * aspect, y: p.y) }

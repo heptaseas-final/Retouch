@@ -18,4 +18,9 @@ nonisolated enum HeadProfileStore {
         guard let data = try? JSONEncoder().encode(profile) else { return }
         UserDefaults.standard.set(data, forKey: key)
     }
+
+    /// Hapus hasil belajar tersimpan (untuk testing).
+    static func reset() {
+        UserDefaults.standard.removeObject(forKey: key)
+    }
 }

@@ -1,12 +1,7 @@
-//
-//  ZoomAnimator.swift
-//  Retouch
-//
-//  Created by Davin P on 25/10/26.
-//
 import SwiftUI
 
 /// Menghaluskan skala dan geser di 60 fps. Semua state hanya disentuh di main thread.
+/// Besar zoom untuk satu target selalu sama; posisi dijaga lewat pembatasan geser (pan).
 nonisolated final class ZoomAnimator: NSObject, @unchecked Sendable {
     enum Focus: Equatable {
         case center
@@ -21,11 +16,10 @@ nonisolated final class ZoomAnimator: NSObject, @unchecked Sendable {
 
     var onChange: (@Sendable (ZoomState) -> Void)?
 
-    private let zoomInTau: CGFloat = 0.14
-    private let zoomOutTau: CGFloat = 0.20
+    private let zoomInTau = ZoomTuning.zoomInTau
+    private let zoomOutTau = ZoomTuning.zoomOutTau
     private let panTau: CGFloat = 0.12
     private let lockZone: CGFloat = 0.12
-    private let maxAutoZoom: CGFloat = 1.3
     private let scaleLock = NSLock()
 
     private var viewSize: CGSize = .zero
@@ -41,7 +35,7 @@ nonisolated final class ZoomAnimator: NSObject, @unchecked Sendable {
     private var lastState = ZoomState()
     private var link: CADisplayLink?
     private var shownScale: CGFloat = 1
-    
+
     func reset() {
         goalScale = 1
         currentScale = 1
@@ -56,7 +50,7 @@ nonisolated final class ZoomAnimator: NSObject, @unchecked Sendable {
         lastState = ZoomState()
         onChange?(lastState)
     }
-    
+
     var displayedScale: CGFloat {
         scaleLock.lock(); defer { scaleLock.unlock() }
         return shownScale
@@ -122,26 +116,15 @@ nonisolated final class ZoomAnimator: NSObject, @unchecked Sendable {
         return filter
     }
 
-    private func scaleToCenter(_ f: CGPoint, _ size: CGSize) -> CGFloat {
-        func needed(_ distance: CGFloat, _ half: CGFloat) -> CGFloat {
-            distance < half ? half / (half - distance) : .greatestFiniteMagnitude
-        }
-        return max(needed(abs(size.width / 2 - f.x), size.width / 2),
-                   needed(abs(size.height / 2 - f.y), size.height / 2))
-    }
-
     @objc private func tick(_ link: CADisplayLink) {
         let size = viewSize
         guard size.width > 0, size.height > 0 else { return }
         let center = CGPoint(x: size.width / 2, y: size.height / 2)
         let dt = min(max(CGFloat(link.targetTimestamp - link.timestamp), 1.0 / 120.0), 0.05)
 
-        var scaleGoal = goalScale
-        if case .target = mode, let f = lockedFocus, goalScale > 1 {
-            scaleGoal = min(max(goalScale, scaleToCenter(f, size)), goalScale * maxAutoZoom)
-        }
-        let tau = scaleGoal > currentScale ? zoomInTau : zoomOutTau
-        currentScale += (scaleGoal - currentScale) * (1 - exp(-dt / tau))
+        // Besar zoom hanya mengikuti goal, tidak bergantung posisi wajah di layar
+        let tau = goalScale > currentScale ? zoomInTau : zoomOutTau
+        currentScale += (goalScale - currentScale) * (1 - exp(-dt / tau))
         scaleLock.lock(); shownScale = currentScale; scaleLock.unlock()
 
         let maxX = (currentScale - 1) * size.width / 2
@@ -154,6 +137,7 @@ nonisolated final class ZoomAnimator: NSObject, @unchecked Sendable {
             goalY = currentScale * (center.y - f.y)
         }
 
+        // Geser dibatasi supaya gambar tidak keluar dari tepi layar
         goalX = min(max(goalX, -maxX), maxX)
         goalY = min(max(goalY, -maxY), maxY)
 
@@ -162,7 +146,7 @@ nonisolated final class ZoomAnimator: NSObject, @unchecked Sendable {
         panY += (goalY - panY) * ap
 
         if isRecentering, abs(goalX - panX) < 0.5, abs(goalY - panY) < 0.5,
-           abs(scaleGoal - currentScale) < 0.01 {
+           abs(goalScale - currentScale) < 0.01 {
             isRecentering = false
         }
 

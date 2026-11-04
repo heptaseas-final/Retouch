@@ -1,52 +1,50 @@
 import Foundation
 
 nonisolated struct ZoomGestureResolver {
-    var exitHold: TimeInterval = 1.0          // jeda sebelum turun tingkat atau zoom out penuh
-    var quickExitConfirm: TimeInterval = 0.4  // tangan jauh + kepala lurus selama ini: zoom out langsung
-    var switchDwell: TimeInterval = 0.0
-    var lipsSwitchDwell: TimeInterval = 0.0   // pindah ke bibir dari target lain
-    var lipsFirstDwell: TimeInterval = 0.0    // zoom pertama ke bibir dari full face
+    var exitHold: TimeInterval = ZoomTuning.exitHold   // jeda sebelum turun tingkat atau zoom out penuh (tetap, tidak dipelajari)
+    // Dwell di sini adalah penjaga kedua; dwell utama untuk target tangan ada di HandProximityRecognizer
+    var switchDwell: TimeInterval = ZoomTuning.resolverSwitchDwell        // pindah antar target (termasuk mata L/R)
+    var lipsSwitchDwell: TimeInterval = ZoomTuning.resolverLipsSwitchDwell   // pindah ke bibir dari target lain
+    var lipsFirstDwell: TimeInterval = ZoomTuning.resolverLipsFirstDwell     // zoom pertama ke bibir dari full face
     var handCooldown: TimeInterval = 0.5      // kepala ditekan setelah tangan hilang (target non-tangan)
     var exitCooldown: TimeInterval = 1.0      // kepala ditekan setelah zoom out
+    var coverHold: TimeInterval = ZoomTuning.coverHold   // tahan zoom saat tangan menutupi wajah (ada batasnya)
 
     private(set) var target: ZoomTarget = .fullFace
+    /// Sejak ada aktivitas tangan (mata/bibir), zoom samping diblok sampai kepala lurus sekali.
+    /// Menoleh yang sudah jadi posisi makeup tidak boleh berubah jadi zoom samping begitu tangan pergi.
+    private(set) var headLocked = false
+    private var straightSince: Date?
     private var lastActive = Date.distantPast
     private var lastHandSeen = Date.distantPast
     private var lastExit = Date.distantPast
-    private var farSince: Date?
     private var pending: (target: ZoomTarget, since: Date)?
-    private var gapEMA: TimeInterval = 0
-    private var handLostAt: Date?
-    private var lastHoldExit: (target: ZoomTarget, at: Date)?
 
-    init(exitHold: TimeInterval = 1.0) { self.exitHold = exitHold }
+    init(exitHold: TimeInterval = ZoomTuning.exitHold) { self.exitHold = exitHold }
 
-    /// `head` = keputusan mentah dari HeadPoseRecognizer. `handFar` = tangan sudah jauh dari semua fitur.
-    mutating func resolve(hand: ZoomTarget?, head: ZoomTarget?, handFar: Bool, now: Date) -> ZoomTarget {
+    /// `head` = keputusan mentah dari HeadPoseRecognizer. `covering` = tangan/brush sedang menutupi wajah,
+    /// jadi data wajah bisa hilang sebentar dan itu bukan tanda user selesai.
+    /// `headStraight` = kepala sedang lurus (HeadPoseRecognizer.isStraight).
+    mutating func resolve(hand: ZoomTarget?, head: ZoomTarget?, covering: Bool, headStraight: Bool,
+                          now: Date) -> ZoomTarget {
         if hand != nil { lastHandSeen = now }
         let handDriven = Self.isHandTarget(target)
+        updateHeadLock(handActive: hand != nil || handDriven, head: head, headStraight: headStraight, now: now)
 
-        // Ukur jeda antar goresan: tangan hilang lalu kembali sebelum zoom turun
-        if handDriven {
-            if hand == nil, handLostAt == nil { handLostAt = now }
-            if hand != nil, let lost = handLostAt {
-                let gap = now.timeIntervalSince(lost)
-                if gap > 0.15, gap < exitHold { recordGap(gap) }
-                handLostAt = nil
-            }
-        } else {
-            handLostAt = nil
-        }
-
-        // Dari mata/bibir, kepala baru boleh mengambil alih setelah jeda (bukan hanya cooldown singkat)
+        // Dari mata/bibir, kepala baru boleh mengambil alih setelah jeda (bukan hanya cooldown singkat).
+        // Selama tangan menutupi wajah, zoom mata/bibir tidak diserahkan ke kepala.
         let settle = handDriven ? exitHold : handCooldown
         let headAllowed = now.timeIntervalSince(lastHandSeen) >= settle
             && now.timeIntervalSince(lastExit) >= exitCooldown
+            && !(covering && handDriven)
+            && !headLocked
 
         guard let candidate = hand ?? (headAllowed ? head : nil) else {
             pending = nil
-            if target != .fullFace, now.timeIntervalSince(lastActive) >= exitHold {
-                zoomOut(at: now, byHold: true)
+            // Tangan menutupi wajah: tahan lebih lama, tetap ada batas (dihitung dari aktivitas terakhir)
+            let hold = covering ? max(exitHold, coverHold) : exitHold
+            if target != .fullFace, now.timeIntervalSince(lastActive) >= hold {
+                zoomOut(at: now)
             }
             return target
         }
@@ -62,37 +60,46 @@ nonisolated struct ZoomGestureResolver {
         let dwell: TimeInterval
         if candidate == .lips {
             dwell = isFirst ? lipsFirstDwell : lipsSwitchDwell
-        } else if Self.isEye(candidate), Self.isEye(target) {
-            dwell = 0       // mata L ke mata R langsung, tanpa jeda
         } else {
+            // Mata L ke mata R juga memakai dwell, tidak lagi langsung
             dwell = isFirst ? 0 : switchDwell
         }
         if let p = pending, now.timeIntervalSince(p.since) >= dwell {
-            // Zoom baru turun karena jeda, lalu tangan balik ke target yang sama: turunnya terlalu cepat
-            if hand != nil, let last = lastHoldExit, last.target == candidate,
-               now.timeIntervalSince(last.at) < 1.5 {
-                exitHold = min(exitHold * 1.1, 1.8)
-                gapEMA = exitHold / 1.6
-            }
-            lastHoldExit = nil
             target = candidate
             pending = nil
         }
         return target
     }
 
-    private mutating func zoomOut(at now: Date, byHold: Bool = false) {
-        if byHold { lastHoldExit = (target, now) }
+    /// Kunci dipasang selama ada aktivitas tangan. Dibuka kalau tangan sudah tidak aktif, kepala lurus
+    /// selama `headRearmStraight`, dan HeadPoseRecognizer juga sudah melepas keputusan sampingnya
+    /// (supaya sisa hysteresis tidak memunculkan zoom samping tepat setelah kunci dibuka).
+    private mutating func updateHeadLock(handActive: Bool, head: ZoomTarget?, headStraight: Bool, now: Date) {
+        guard ZoomTuning.headRearmEnabled else {
+            headLocked = false
+            return
+        }
+        if handActive {
+            headLocked = true
+            straightSince = nil
+            return
+        }
+        guard headLocked else { return }
+        if headStraight, head == nil {
+            if straightSince == nil { straightSince = now }
+            if let since = straightSince, now.timeIntervalSince(since) >= ZoomTuning.headRearmStraight {
+                headLocked = false
+                straightSince = nil
+            }
+        } else {
+            straightSince = nil
+        }
+    }
+
+    private mutating func zoomOut(at now: Date) {
         target = .fullFace
         lastExit = now
         pending = nil
-        farSince = nil
-        handLostAt = nil
-    }
-    
-    private mutating func recordGap(_ gap: TimeInterval) {
-        gapEMA = gapEMA == 0 ? gap : gapEMA + 0.2 * (gap - gapEMA)
-        exitHold = min(max(gapEMA * 1.6, 0.7), 1.8)
     }
 
     private static func isEye(_ t: ZoomTarget) -> Bool { t == .leftEye || t == .rightEye }

@@ -1,9 +1,3 @@
-//
-//  ZoomGestureServicing.swift
-//  Retouch
-//
-//  Created by Davin P on 25/10/26.
-//
 import AVFoundation
 
 nonisolated protocol ZoomGestureServicing: AnyObject, Sendable {
@@ -19,4 +13,9 @@ nonisolated protocol ZoomGestureServicing: AnyObject, Sendable {
     func pinchEnded()
     func resetSession()
     func setLearningPaused(_ paused: Bool)
+    // Alat uji (debug overlay)
+    func resetLearning()
+    func zoomLogSummary() -> ZoomLogSummary
+    func zoomLogText() -> String
+    func clearZoomLog()
 }
