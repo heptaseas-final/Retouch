@@ -47,8 +47,8 @@ nonisolated struct ZoomTuning {
     
     // MARK: - Dwell resolver
     static let resolverSwitchDwell: TimeInterval = 0.15
-    static let resolverLipsSwitchDwell: TimeInterval = 0.15
-    static let resolverLipsFirstDwell: TimeInterval = 0.1
+//    static let resolverLipsSwitchDwell: TimeInterval = 0.15
+//    static let resolverLipsFirstDwell: TimeInterval = 0.1
 
     // MARK: - Animasi zoom (konstanta waktu, detik)
     static let zoomInTau: CGFloat = 0.28
@@ -96,6 +96,17 @@ nonisolated struct ZoomTuning {
     static let handMaxGap: TimeInterval = 0.5
     static let maxStep: TimeInterval = 0.35
     static let nominalStep: TimeInterval = 1.0 / 12.0
+    
+    // MARK: - Zoom bibir satu alur
+    static let lipsEnterDwell: TimeInterval = 0.5     // pose 2 jari / 3 jari, timer sendiri-sendiri
+    static let lipsReleaseDwell: TimeInterval = 2.0   // dipakai di tahap 3
+    static let lipsPose2Max: CGFloat = 0.4            // jarak jempol-telunjuk / ukuran telapak
+    static let lipsHoldRadius = handEnterDistance * 1.5  // lebar wajah, jari di dalam ini = penahan (dipakai di tahap 4)
+    static let lipMotionBaselineTau = 0.8    // detik, rata-rata lambat bentuk bibir
+    static let lipMotionDevTau = 0.15        // detik, penghalus simpangan
+    static let lipMotionEnter = 0.05         // satuan jarak antar mata: di atas ini = bibir bergerak
+    static let lipMotionExit = 0.025         // di bawah ini = bibir diam (histeresis)
+    static let lipMotionLostGrace: TimeInterval = 0.5   // wajah tidak terbaca sesingkat ini: status ditahan
 }
 
 /// Hasil deteksi lengkap dengan cap waktu dan nomor urut yang bertambah.

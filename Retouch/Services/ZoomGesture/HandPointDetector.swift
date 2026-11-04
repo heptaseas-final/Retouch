@@ -22,6 +22,9 @@ nonisolated final class HandPointDetector: @unchecked Sendable {
     private var windowStart = CACurrentMediaTime()
     private var rate = 0
     private var generation = 0
+    private let pinch2Max = ZoomTuning.lipsPose2Max
+    private let tipJoints: [VNHumanHandPoseObservation.JointName] =
+        [.thumbTip, .indexTip, .middleTip, .ringTip, .littleTip]
 
     /// Hasil terakhir beserta nomor urut dan cap waktu. Nomor urut naik setiap ada hasil deteksi baru.
     var snapshot: DetectionSnapshot<HandScan> {
@@ -78,7 +81,6 @@ nonisolated final class HandPointDetector: @unchecked Sendable {
         guard let results = request.results else { return scan }
         scan.handsSeen = results.count
 
-        // Hitung di ruang yang sudah dikoreksi aspek, supaya jarak x dan y sebanding
         func scaled(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x * aspect, y: p.y) }
         func unscaled(_ p: CGPoint) -> CGPoint {
             CGPoint(x: min(max(p.x / aspect, 0), 1), y: min(max(p.y, 0), 1))
@@ -86,33 +88,57 @@ nonisolated final class HandPointDetector: @unchecked Sendable {
         func dist(_ a: CGPoint, _ b: CGPoint) -> CGFloat { hypot(a.x - b.x, a.y - b.y) }
 
         for obs in results {
+            // Posisi ujung jari: tanpa syarat pose, dipakai sebagai penahan zoom bibir
+            for joint in tipJoints {
+                if let p = try? obs.recognizedPoint(joint), p.confidence >= minJointConfidence {
+                    scan.fingertips.append(CGPoint(x: min(max(p.location.x, 0), 1),
+                                                   y: min(max(p.location.y, 0), 1)))
+                }
+            }
+
             guard let thumb = try? obs.recognizedPoint(.thumbTip),
                   let index = try? obs.recognizedPoint(.indexTip),
-                  let middle = try? obs.recognizedPoint(.middleTip),
                   let wrist = try? obs.recognizedPoint(.wrist),
                   let palm = try? obs.recognizedPoint(.middleMCP) else { continue }
+            let middle = try? obs.recognizedPoint(.middleTip)
 
             let tS = scaled(thumb.location)
             let iS = scaled(index.location)
-            let mS = scaled(middle.location)
             let wS = scaled(wrist.location)
             let palmS = scaled(palm.location)
-
             let handSize = dist(wS, palmS)
             guard handSize > 0.01 else { continue }
 
-            let pinch = max(dist(tS, iS), dist(tS, mS), dist(iS, mS)) / handSize
-            let confidence = min(thumb.confidence, index.confidence, middle.confidence)
+            let ratio2 = dist(tS, iS) / handSize
+            let conf2 = min(thumb.confidence, index.confidence)
+            if ratio2 < (scan.pinchRatio2 ?? .infinity) { scan.pinchRatio2 = ratio2 }
 
-            if pinch < (scan.pinchRatio ?? .infinity) {
-                scan.pinchRatio = pinch
-                scan.confidence = confidence
+            var ratio3: CGFloat?
+            var conf3: Float = 0
+            var mS: CGPoint?
+            if let middle {
+                let m = scaled(middle.location)
+                mS = m
+                ratio3 = max(dist(tS, iS), dist(tS, m), dist(iS, m)) / handSize
+                conf3 = min(conf2, middle.confidence)
+                if let r3 = ratio3, r3 < (scan.pinchRatio ?? .infinity) {
+                    scan.pinchRatio = r3
+                    scan.confidence = conf3
+                }
             }
 
-            guard confidence >= minJointConfidence, wrist.confidence > 0.2, palm.confidence > 0.2, pinch <= pinchMax else { continue }
+            let baseOK = wrist.confidence > 0.2 && palm.confidence > 0.2
+            let three = baseOK && (ratio3 ?? .infinity) <= pinchMax && conf3 >= minJointConfidence
+            let two = baseOK && ratio2 <= pinch2Max && conf2 >= minJointConfidence
+            guard three || two else { continue }
 
-            let g = CGPoint(x: (tS.x + iS.x + mS.x) / 3, y: (tS.y + iS.y + mS.y) / 3)
-
+            // Pose 3 jari memakai titik tengah tiga ujung (seperti sebelumnya), pose 2 jari titik tengah dua ujung
+            let g: CGPoint
+            if three, let mS {
+                g = CGPoint(x: (tS.x + iS.x + mS.x) / 3, y: (tS.y + iS.y + mS.y) / 3)
+            } else {
+                g = CGPoint(x: (tS.x + iS.x) / 2, y: (tS.y + iS.y) / 2)
+            }
             var dx = g.x - wS.x
             var dy = g.y - wS.y
             let len = hypot(dx, dy)
@@ -121,7 +147,8 @@ nonisolated final class HandPointDetector: @unchecked Sendable {
             dy /= len
             let tipS = CGPoint(x: g.x + dx * handSize * tipExtension,
                                y: g.y + dy * handSize * tipExtension)
-            scan.grips.append(GripObservation(grip: unscaled(g), tip: unscaled(tipS)))
+            scan.grips.append(GripObservation(grip: unscaled(g), tip: unscaled(tipS),
+                                              twoFinger: two, threeFinger: three))
         }
         return scan
     }

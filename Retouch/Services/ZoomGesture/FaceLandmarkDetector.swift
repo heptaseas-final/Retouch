@@ -94,7 +94,15 @@ nonisolated final class FaceLandmarkDetector: @unchecked Sendable {
             pitch = estimatePitch(leftEye: l, rightEye: r, nose: center(lm.nose),
                                   mouth: center(lm.outerLips), aspect: aspect)
         }
-
+        
+        var mouth: (width: Double, height: Double, gap: Double)?
+        if let l = leftEye, let r = rightEye {
+            mouth = estimateMouth(leftEye: l, rightEye: r,
+                                  outer: lm.outerLips?.normalizedPoints.map(point) ?? [],
+                                  inner: lm.innerLips?.normalizedPoints.map(point) ?? [],
+                                  aspect: aspect)
+        }
+        
         return FaceObservation(
             leftEye: leftEye,
             rightEye: rightEye,
@@ -103,10 +111,35 @@ nonisolated final class FaceLandmarkDetector: @unchecked Sendable {
             width: box.width,
             yaw: yaw,
             aspect: Double(box.height / (box.width * aspect)),
-            pitch: pitch
+            pitch: pitch,
+            mouthWidth: mouth?.width ?? .nan,
+            mouthHeight: mouth?.height ?? .nan,
+            mouthGap: mouth?.gap ?? .nan
         )
     }
 
+    /// Bentuk bibir dalam satuan jarak antar mata, searah garis mata (lebar) dan tegak lurusnya (tinggi),
+    /// jadi ikut benar kalau kepala miring dan tidak terpengaruh jarak ke kamera.
+    private func estimateMouth(leftEye l: CGPoint, rightEye r: CGPoint,
+                               outer: [CGPoint], inner: [CGPoint],
+                               aspect: CGFloat) -> (width: Double, height: Double, gap: Double)? {
+        guard outer.count >= 4 else { return nil }
+        func iso(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x * aspect, y: p.y) }
+        let le = iso(l), re = iso(r)
+        let dist = hypot(re.x - le.x, re.y - le.y)
+        guard dist > 0 else { return nil }
+        let ux = (re.x - le.x) / dist, uy = (re.y - le.y) / dist
+        let vx = uy, vy = -ux
+        func span(_ pts: [CGPoint], _ ax: CGFloat, _ ay: CGFloat) -> Double {
+            let vals = pts.map { iso($0).x * ax + iso($0).y * ay }
+            guard let lo = vals.min(), let hi = vals.max() else { return 0 }
+            return Double((hi - lo) / dist)
+        }
+        return (width: span(outer, ux, uy),
+                height: span(outer, vx, vy),
+                gap: inner.count >= 2 ? span(inner, vx, vy) : 0)
+    }
+    
     /// Hidung menonjol ke depan, jadi saat dagu naik ujung hidung terlihat bergeser ke arah mata.
     /// Diukur sebagai posisi hidung di antara garis mata dan bibir, searah sumbu "turun" wajah
     /// (tegak lurus garis mata, jadi ikut benar kalau kepala miring). Positif = mendongak.

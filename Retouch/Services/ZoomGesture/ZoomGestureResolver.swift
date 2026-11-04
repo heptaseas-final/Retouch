@@ -4,8 +4,8 @@ nonisolated struct ZoomGestureResolver {
     var exitHold: TimeInterval = ZoomTuning.exitHold   // jeda sebelum turun tingkat atau zoom out penuh (tetap, tidak dipelajari)
     // Dwell di sini adalah penjaga kedua; dwell utama untuk target tangan ada di HandProximityRecognizer
     var switchDwell: TimeInterval = ZoomTuning.resolverSwitchDwell        // pindah antar target (termasuk mata L/R)
-    var lipsSwitchDwell: TimeInterval = ZoomTuning.resolverLipsSwitchDwell   // pindah ke bibir dari target lain
-    var lipsFirstDwell: TimeInterval = ZoomTuning.resolverLipsFirstDwell     // zoom pertama ke bibir dari full face
+//    var lipsSwitchDwell: TimeInterval = ZoomTuning.resolverLipsSwitchDwell
+//    var lipsFirstDwell: TimeInterval = ZoomTuning.resolverLipsFirstDwell
     var handCooldown: TimeInterval = 0.5      // kepala ditekan setelah tangan hilang (target non-tangan)
     var exitCooldown: TimeInterval = 1.0      // kepala ditekan setelah zoom out
     var coverHold: TimeInterval = ZoomTuning.coverHold   // tahan zoom saat tangan menutupi wajah (ada batasnya)
@@ -22,26 +22,29 @@ nonisolated struct ZoomGestureResolver {
 
     init(exitHold: TimeInterval = ZoomTuning.exitHold) { self.exitHold = exitHold }
 
-    /// `head` = keputusan mentah dari HeadPoseRecognizer. `covering` = tangan/brush sedang menutupi wajah,
-    /// jadi data wajah bisa hilang sebentar dan itu bukan tanda user selesai.
-    /// `headStraight` = kepala sedang lurus (HeadPoseRecognizer.isStraight).
-    mutating func resolve(hand: ZoomTarget?, head: ZoomTarget?, covering: Bool, headStraight: Bool,
-                          now: Date) -> ZoomTarget {
-        if hand != nil { lastHandSeen = now }
+    mutating func resolve(hand: ZoomTarget?, lips: Bool, head: ZoomTarget?, covering: Bool,
+                          headStraight: Bool, now: Date) -> ZoomTarget {
+        // Mata datang dari recognizer tangan. Bibir datang dari LipsZoomFlow, yang sudah menghitung
+        // masuk (0,5 dtk) dan lepas (2 dtk) sendiri, jadi di sini tidak ada dwell atau jeda tambahan untuk bibir.
+        let handCandidate: ZoomTarget? = hand ?? (lips ? .lips : nil)
+        if handCandidate != nil { lastHandSeen = now }
         let handDriven = Self.isHandTarget(target)
-        updateHeadLock(handActive: hand != nil || handDriven, head: head, headStraight: headStraight, now: now)
+        updateHeadLock(handActive: handCandidate != nil || handDriven, head: head,
+                       headStraight: headStraight, now: now)
 
-        // Dari mata/bibir, kepala baru boleh mengambil alih setelah jeda (bukan hanya cooldown singkat).
-        // Selama tangan menutupi wajah, zoom mata/bibir tidak diserahkan ke kepala.
         let settle = handDriven ? exitHold : handCooldown
         let headAllowed = now.timeIntervalSince(lastHandSeen) >= settle
             && now.timeIntervalSince(lastExit) >= exitCooldown
             && !(covering && handDriven)
             && !headLocked
 
-        guard let candidate = hand ?? (headAllowed ? head : nil) else {
+        guard let candidate = handCandidate ?? (headAllowed ? head : nil) else {
             pending = nil
-            // Tangan menutupi wajah: tahan lebih lama, tetap ada batas (dihitung dari aktivitas terakhir)
+            // Bibir: LipsZoomFlow sudah menunggu 2 detik, langsung turun
+            if target == .lips {
+                zoomOut(at: now)
+                return target
+            }
             let hold = covering ? max(exitHold, coverHold) : exitHold
             if target != .fullFace, now.timeIntervalSince(lastActive) >= hold {
                 zoomOut(at: now)
@@ -57,13 +60,7 @@ nonisolated struct ZoomGestureResolver {
         if pending?.target != candidate { pending = (candidate, now) }
 
         let isFirst = target == .fullFace
-        let dwell: TimeInterval
-        if candidate == .lips {
-            dwell = isFirst ? lipsFirstDwell : lipsSwitchDwell
-        } else {
-            // Mata L ke mata R juga memakai dwell, tidak lagi langsung
-            dwell = isFirst ? 0 : switchDwell
-        }
+        let dwell: TimeInterval = (candidate == .lips || isFirst) ? 0 : switchDwell
         if let p = pending, now.timeIntervalSince(p.since) >= dwell {
             target = candidate
             pending = nil
