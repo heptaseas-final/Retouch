@@ -21,5 +21,26 @@ struct RetouchTests {
         #expect(viewModel.isAutoBrightness == true)
         #expect(viewModel.selectedColor == .white)
     }
+    
+//    func testSetAutoBrightnessResetsToDefault() async {
+//        
+//        let mockDetector = await AutoLightDetector()
+//        let viewModel = await LightingViewModel(detector: mockDetector)
+//        
+//        await viewModel.setBrightness(0.8)
+//        await viewModel.select(.warm)
+//        
+//        let initialIsAuto = await viewModel.isAutoBrightness
+//        let initialColor = await viewModel.selectedColor
+//        #expect(initialIsAuto == false)
+//        #expect(initialColor == .warm)
+//        
+//        await viewModel.setAuto(true)
+//        
+//        let finalIsAuto = await viewModel.isAutoBrightness
+//        let finalColor = await viewModel.selectedColor
+//        #expect(finalIsAuto == true)
+//        #expect(finalColor == .white)
+//    }
 }
 

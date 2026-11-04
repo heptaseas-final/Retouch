@@ -39,9 +39,12 @@ struct OnboardingView: View {
             .allowsHitTesting(false)
             .ignoresSafeArea()
 
-            skipButton
+            if !pages[currentPage].isLastPage {
+                skipButton
+            }
             bottomContent
         }
+        .animation(.easeInOut, value: currentPage)
     }
 
     private var skipButton: some View {
@@ -53,16 +56,17 @@ struct OnboardingView: View {
                 } label: {
                     Text("Skip")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundColor(.black)
+                        .foregroundColor(.white)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
-                        .background(.ultraThinMaterial, in: Capsule())
+                        .background(Capsule().fill(Color.appMagenta))
                 }
                 .padding(.trailing, 20)
                 .padding(.top, 12)
             }
             Spacer()
         }
+        .transition(.opacity)
     }
 
     private var bottomContent: some View {
@@ -70,7 +74,7 @@ struct OnboardingView: View {
             Spacer()
             VStack(spacing: 20) {
                 Text(pages[currentPage].title)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .multilineTextAlignment(.center)
                     .foregroundColor(.white)
                     .padding(.horizontal, 32)
@@ -106,7 +110,7 @@ struct OnboardingView: View {
                 .padding(.vertical, 16)
                 .background(
                     Capsule()
-                        .fill(Color(red: 0.55, green: 0.15, blue: 0.32))
+                        .fill(Color.appMagenta)
                 )
         }
         .padding(.horizontal, 24)

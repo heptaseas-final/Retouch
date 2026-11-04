@@ -144,7 +144,7 @@
 		62189653E29C3ADB61E51609 /* MirrorRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirrorRenderer.swift; sourceTree = "<group>"; };
 		63086871DFAC6408E9264887 /* RetouchWidgetExtControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetouchWidgetExtControl.swift; sourceTree = "<group>"; };
 		69DC9F0F2BE581E66293B2BE /* EdgeLightOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EdgeLightOverlay.swift; sourceTree = "<group>"; };
-		69EC082892D1822FA6E7E140 /* Retouch: The Better Mirror.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Retouch: The Better Mirror.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		69EC082892D1822FA6E7E140 /* Retouch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Retouch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6B7717F5A277D74D9E58596C /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		6BB19F329A93DFE24BD829F0 /* auto-brightness.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "auto-brightness.mp4"; sourceTree = "<group>"; };
 		6E5D12EC0E5CA7AC3B2F27C0 /* GestureDebugDots.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GestureDebugDots.swift; sourceTree = "<group>"; };
@@ -425,7 +425,7 @@
 		EBD35036C3E8356FC0A1D0E8 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				69EC082892D1822FA6E7E140 /* Retouch: The Better Mirror.app */,
+				69EC082892D1822FA6E7E140 /* Retouch.app */,
 				A73050697629A461A47600AC /* RetouchTests.xctest */,
 				087E680C3D422B36064C7554 /* RetouchUITests.xctest */,
 				7956B6BD82D39C71C82E9D04 /* RetouchWidgetExt.appex */,
@@ -535,7 +535,7 @@
 			packageProductDependencies = (
 			);
 			productName = Retouch;
-			productReference = 69EC082892D1822FA6E7E140 /* Retouch: The Better Mirror.app */;
+			productReference = 69EC082892D1822FA6E7E140 /* Retouch.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -557,7 +557,6 @@
 					};
 					B07A2FAEA483B4A9643FC4C0 = {
 						DevelopmentTeam = Y2U32BVMN3;
-						TestTargetID = D65993A029F777865376CDD6;
 					};
 					D65993A029F777865376CDD6 = {
 						DevelopmentTeam = Y2U32BVMN3;
@@ -859,6 +858,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -867,7 +867,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = bsd.iosda.RetouchTests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Retouch: The Better Mirror.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Retouch: The Better Mirror";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Retouch.app/Retouch";
 			};
 			name = Debug;
 		};
@@ -876,6 +876,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -906,14 +907,14 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = bsd.iosda.Retouch;
-				PRODUCT_MODULE_NAME = Retouch;
-				PRODUCT_NAME = "Retouch: The Better Mirror";
+				PRODUCT_NAME = Retouch;
 				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -934,6 +935,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RetouchWidgetExt/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Retouch;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -969,14 +971,14 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = bsd.iosda.Retouch;
-				PRODUCT_MODULE_NAME = Retouch;
-				PRODUCT_NAME = "Retouch: The Better Mirror";
+				PRODUCT_NAME = Retouch;
 				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -993,6 +995,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1010,6 +1013,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1018,7 +1022,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = bsd.iosda.RetouchTests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Retouch: The Better Mirror.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Retouch: The Better Mirror";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Retouch.app/Retouch";
 			};
 			name = Release;
 		};
@@ -1031,6 +1035,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = RetouchWidgetExt/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Retouch;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
