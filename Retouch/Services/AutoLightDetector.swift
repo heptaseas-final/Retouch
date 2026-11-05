@@ -10,9 +10,10 @@ final class AutoLightDetector {
     private(set) var filterColor: ManualColorChoice?
     private(set) var ringLightLevel: Double = 0
 
-    @ObservationIgnored let renderer: MirrorRenderer
-    @ObservationIgnored let frameForwarder = FrameForwarder()
     @ObservationIgnored let config = LightingConfig()
+    @ObservationIgnored let pipeline: FramePipeline
+    @ObservationIgnored var renderer: MirrorRenderer { pipeline.renderer }
+    @ObservationIgnored var frameForwarder: FrameForwarder { pipeline.vision }
 
     @ObservationIgnored private let camera = CameraSessionManager()
     @ObservationIgnored private let brightness = BrightnessController()
@@ -24,9 +25,9 @@ final class AutoLightDetector {
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
 
     init() {
-        renderer = MirrorRenderer()
         camera.prefersAutoFrameRate = config.autoFrameRateInDark
         engine = LightingEngine(camera: camera, config: config)
+        pipeline = FramePipeline(lighting: engine)
         appliedBrightness = Self.roundedPercent(brightness.current)
 
         brightness.onChange = { [weak self] value in
@@ -35,11 +36,7 @@ final class AutoLightDetector {
             if rounded != appliedBrightness { appliedBrightness = rounded }
         }
         camera.onStateChange = { [weak self] in self?.cameraStateChanged($0) }
-        camera.onFrame = { [renderer, engine, frameForwarder] frame in
-            let params = engine.process(frame)
-            renderer.render(frame.pixelBuffer, params: params)
-            frameForwarder.send(frame.pixelBuffer)
-        }
+        camera.onFrame = { [pipeline] frame in pipeline.process(frame) }
         engine.onOutput = { [weak self] in self?.engineDidUpdate($0) }
 
         let center = NotificationCenter.default

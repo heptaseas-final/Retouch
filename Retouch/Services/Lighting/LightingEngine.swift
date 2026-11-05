@@ -38,7 +38,7 @@ final class LightingEngine {
         lock.withLock { _needsReset = true }
     }
 
-    func process(_ frame: CameraFrame) -> FramePipeline.Parameters {
+    func process(_ frame: CameraFrame) -> FrameEnhancer.Parameters {
         let (needsReset, manual) = lock.withLock { () -> (Bool, Double?) in
             defer { _needsReset = false }
             return (_needsReset, _manualPanel)
@@ -60,7 +60,7 @@ final class LightingEngine {
         log(frame, roomLux: roomLux)
 
         let noise = noiseLevel(iso: frame.iso)
-        var params = FramePipeline.Parameters()
+        var params = FrameEnhancer.Parameters()
         params.noise = noise
         params.chromaDenoise = darkness
         params.spatial = 0.6 * darkness
