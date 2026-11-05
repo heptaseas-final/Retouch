@@ -6,40 +6,43 @@
 //
 
 import AVFoundation
+import ImageIO
 
-struct LightSample {
-    var iso: Double
-    var exposureDuration: Double
-    var aperture: Double
-    var exposureTargetOffset: Double
-    var current: WhiteBalance?
-    var grayWorld: WhiteBalance?
+struct CameraFrame {
+    let pixelBuffer: CVPixelBuffer
+    let time: Double
+    let exposureDuration: Double
+    let iso: Float
+    let exposureTargetOffset: Float
+}
+
+struct CameraExposureRange {
+    var minISO: Float
+    var maxISO: Float
+    var aperture: Float
 }
 
 final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     let session = AVCaptureSession()
-    var onLightSample: ((LightSample) -> Void)?
-    var onFrame: ((CVPixelBuffer) -> Void)?
+    var onFrame: ((CameraFrame) -> Void)?
     var onStateChange: ((CameraState) -> Void)?
-    var sampleInterval: CFTimeInterval = 0.1
     var frameRate: Int32 = 60
-    var whiteBalanceGlide: Double = 0.35
+    var prefersAutoFrameRate = false
+    /// Lebar frame yang dicari (4K). Frame lebih besar dari layar lalu dikecilkan oleh renderer:
+    /// lebih tajam dan noise sensor ikut dirata-rata, tanpa delay.
+    var preferredWidth: Int32 = 3840
     var maxRestartAttempts = 3
-    var preferredStabilization: AVCaptureVideoStabilizationMode = .cinematicExtendedEnhanced
+    var preferredStabilization: AVCaptureVideoStabilizationMode = .off
 
     private let sessionQueue = DispatchQueue(label: "autolight.camera.session")
     private let analysisQueue = DispatchQueue(label: "autolight.camera.analysis", qos: .userInitiated)
     private var device: AVCaptureDevice?
     private var videoConnection: AVCaptureConnection?
-    private var lastSampleTime: CFTimeInterval = 0
 
     private var isConfigured = false
     private var wantsRunning = false
     private var restartAttempts = 0
 
-    private var appliedGains: AVCaptureDevice.WhiteBalanceGains?
-    private var targetGains: AVCaptureDevice.WhiteBalanceGains?
-    private var lastGlideTime: CFTimeInterval = 0
 
     override init() {
         super.init()
@@ -124,8 +127,23 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
         enableStabilization(output.connection(with: .video), device)
 
         lockFrameRate(device)
+        configureFocus(device)
         self.device = device
         return true
+    }
+
+    private func configureFocus(_ device: AVCaptureDevice) {
+        withLock(device) { d in
+            if d.isFocusModeSupported(.continuousAutoFocus) { d.focusMode = .continuousAutoFocus }
+            if d.isAutoFocusRangeRestrictionSupported { d.autoFocusRangeRestriction = .none }
+            if d.isSmoothAutoFocusSupported { d.isSmoothAutoFocusEnabled = false }
+            if d.isFocusPointOfInterestSupported { d.focusPointOfInterest = CGPoint(x: 0.5, y: 0.5) }
+        }
+        #if DEBUG
+        print("[Camera] focus autofocus=\(device.isFocusModeSupported(.continuousAutoFocus)) "
+              + "minimumFocusDistance=\(device.minimumFocusDistance)mm "
+              + "nearRange=\(device.isAutoFocusRangeRestrictionSupported)")
+        #endif
     }
 
     private func enableStabilization(_ connection: AVCaptureConnection?, _ device: AVCaptureDevice) {
@@ -157,25 +175,41 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
     }
 
     private func lockFrameRate(_ device: AVCaptureDevice) {
-        let currentWidth = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription).width
-        var best: (format: AVCaptureDevice.Format, fps: Double, widthGap: Int32)?
+        var best: (format: AVCaptureDevice.Format, fps: Double, widthGap: Int32, auto: Bool)?
         for format in device.formats {
             let width = CMVideoFormatDescriptionGetDimensions(format.formatDescription).width
-            guard width >= 1280 else { continue }
+            guard width >= 1280, width <= preferredWidth else { continue }
             let maxFps = format.videoSupportedFrameRateRanges.map(\.maxFrameRate).max() ?? 0
             let fps = min(maxFps, Double(frameRate))
-            let gap = abs(width - currentWidth)
-            if fps > (best?.fps ?? 0) || (fps == best?.fps && gap < (best?.widthGap ?? .max)) {
-                best = (format, fps, gap)
+            let gap = preferredWidth - width
+            let auto = prefersAutoFrameRate && format.isAutoVideoFrameRateSupported
+            let better: Bool
+            if let best {
+                if fps != best.fps { better = fps > best.fps }
+                else if gap != best.widthGap { better = gap < best.widthGap }
+                else if auto != best.auto { better = auto }
+                else { better = !format.isVideoBinned && best.format.isVideoBinned }
+            } else {
+                better = true
             }
+            if better { best = (format, fps, gap, auto) }
         }
         guard let best else { return }
         let duration = CMTime(value: 1, timescale: Int32(best.fps))
         withLock(device) {
             $0.activeFormat = best.format
-            $0.activeVideoMinFrameDuration = duration
-            $0.activeVideoMaxFrameDuration = duration
+            if best.auto {
+                $0.isAutoVideoFrameRateEnabled = true
+            } else {
+                $0.activeVideoMinFrameDuration = duration
+                $0.activeVideoMaxFrameDuration = duration
+            }
         }
+        #if DEBUG
+        let dims = CMVideoFormatDescriptionGetDimensions(best.format.formatDescription)
+        print("[Camera] format \(dims.width)x\(dims.height) fps=\(best.fps) autoFrameRate=\(best.auto) "
+              + "binned=\(best.format.isVideoBinned)")
+        #endif
     }
 
     private func report(_ state: CameraState) {
@@ -221,60 +255,28 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
             }
         }
     }
-
-    func useAutoWhiteBalance() {
-        analysisQueue.async {
-            self.targetGains = nil
-            self.appliedGains = nil
-            guard let device = self.device,
-                  device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) else { return }
-            self.withLock(device) { $0.whiteBalanceMode = .continuousAutoWhiteBalance }
-        }
+    
+    func setAutoExposure() {
+        guard let device, device.isExposureModeSupported(.continuousAutoExposure) else { return }
+        withLock(device) { $0.exposureMode = .continuousAutoExposure }
     }
 
-    func glideWhiteBalance(to target: WhiteBalance) {
-        analysisQueue.async {
-            guard let device = self.device, device.isLockingWhiteBalanceWithCustomDeviceGainsSupported else { return }
-            let values = AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(
-                temperature: Float(target.temperature), tint: Float(target.tint))
-            self.targetGains = Self.clamp(device.deviceWhiteBalanceGains(for: values), device)
-            if self.appliedGains == nil {
-                self.appliedGains = device.deviceWhiteBalanceGains
-                self.lastGlideTime = CACurrentMediaTime()
-            }
-        }
+    func setAutoWhiteBalance() {
+        guard let device, device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) else { return }
+        withLock(device) { $0.whiteBalanceMode = .continuousAutoWhiteBalance }
     }
 
-    private func stepWhiteBalanceGlide(_ device: AVCaptureDevice) {
-        guard let target = targetGains, var gains = appliedGains else { return }
-        let now = CACurrentMediaTime()
-        let k = Float(1 - exp(-(now - lastGlideTime) / whiteBalanceGlide))
-        lastGlideTime = now
-
-        gains.redGain += (target.redGain - gains.redGain) * k
-        gains.greenGain += (target.greenGain - gains.greenGain) * k
-        gains.blueGain += (target.blueGain - gains.blueGain) * k
-        let remaining = max(abs(target.redGain - gains.redGain),
-                            abs(target.greenGain - gains.greenGain),
-                            abs(target.blueGain - gains.blueGain))
-        let finished = remaining < 0.002
-        if finished { gains = target }
-
-        if !finished, let applied = appliedGains,
-           max(abs(gains.redGain - applied.redGain), abs(gains.blueGain - applied.blueGain)) < 0.001 {
-            return
-        }
-        appliedGains = gains
-        if finished { targetGains = nil }
-        let clamped = Self.clamp(gains, device)
-        withLock(device) { $0.setWhiteBalanceModeLocked(with: clamped, completionHandler: nil) }
+    func setExposureBias(_ ev: Float) {
+        guard let device else { return }
+        let bias = min(max(ev, device.minExposureTargetBias), device.maxExposureTargetBias)
+        guard abs(device.exposureTargetBias - bias) > 0.01 else { return }
+        withLock(device) { $0.setExposureTargetBias(bias, completionHandler: nil) }
     }
 
-    private static func clamp(_ gains: AVCaptureDevice.WhiteBalanceGains,
-                              _ device: AVCaptureDevice) -> AVCaptureDevice.WhiteBalanceGains {
-        let maxGain = device.maxWhiteBalanceGain
-        func c(_ g: Float) -> Float { min(max(g, 1), maxGain) }
-        return .init(redGain: c(gains.redGain), greenGain: c(gains.greenGain), blueGain: c(gains.blueGain))
+    func exposureRange() -> CameraExposureRange? {
+        guard let device else { return nil }
+        let format = device.activeFormat
+        return CameraExposureRange(minISO: format.minISO, maxISO: format.maxISO, aperture: device.lensAperture)
     }
 
     private func withLock(_ device: AVCaptureDevice, _ body: (AVCaptureDevice) -> Void) {
@@ -290,27 +292,20 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
     func captureOutput(_ output: AVCaptureOutput,
                        didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
-        guard let device else { return }
-        stepWhiteBalanceGlide(device)
-        if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) { onFrame?(pixelBuffer) }
-
-        let now = CACurrentMediaTime()
-        guard now - lastSampleTime >= sampleInterval else { return }
-        lastSampleTime = now
-
-        let sample = LightSample(iso: Double(device.iso),
-                                 exposureDuration: device.exposureDuration.seconds,
-                                 aperture: Double(device.lensAperture),
-                                 exposureTargetOffset: Double(device.exposureTargetOffset),
-                                 current: Self.whiteBalance(device.deviceWhiteBalanceGains, device),
-                                 grayWorld: Self.whiteBalance(device.grayWorldDeviceWhiteBalanceGains, device))
-        DispatchQueue.main.async { self.onLightSample?(sample) }
+        guard let device, let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        let time = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+        let exposure = Self.exposure(of: sampleBuffer) ?? (device.exposureDuration.seconds, device.iso)
+        onFrame?(CameraFrame(pixelBuffer: pixelBuffer, time: time,
+                             exposureDuration: exposure.duration, iso: exposure.iso,
+                             exposureTargetOffset: device.exposureTargetOffset))
     }
 
-    private static func whiteBalance(_ gains: AVCaptureDevice.WhiteBalanceGains,
-                                     _ device: AVCaptureDevice) -> WhiteBalance? {
-        guard gains.redGain >= 1, gains.greenGain >= 1, gains.blueGain >= 1 else { return nil }
-        let values = device.temperatureAndTintValues(for: clamp(gains, device))
-        return WhiteBalance(temperature: Double(values.temperature), tint: Double(values.tint))
+    private static func exposure(of sampleBuffer: CMSampleBuffer) -> (duration: Double, iso: Float)? {
+        guard let exif = CMGetAttachment(sampleBuffer, key: kCGImagePropertyExifDictionary,
+                                         attachmentModeOut: nil) as? [String: Any],
+              let duration = (exif[kCGImagePropertyExifExposureTime as String] as? NSNumber)?.doubleValue,
+              let iso = (exif[kCGImagePropertyExifISOSpeedRatings as String] as? [NSNumber])?.first?.floatValue,
+              duration > 0, iso > 0 else { return nil }
+        return (duration, iso)
     }
 }
