@@ -107,6 +107,24 @@ nonisolated struct ZoomTuning {
     static let lipMotionEnter = 0.05         // satuan jarak antar mata: di atas ini = bibir bergerak
     static let lipMotionExit = 0.025         // di bawah ini = bibir diam (histeresis)
     static let lipMotionLostGrace: TimeInterval = 0.5   // wajah tidak terbaca sesingkat ini: status ditahan
+    
+    // MARK: - Zoom mata satu alur (semua jarak dalam satuan d = jarak antar mata, FacePoints.scale)
+    static let eyeZoneTrigger: CGFloat = 0.44     // radius trigger per mata
+    static let eyeZoneHold: CGFloat = 0.78        // radius tahan maksimum per mata
+    static let eyeZoneDead: CGFloat = 0.09        // setengah lebar zona mati di garis tengah
+    static let eyeFlowEnterDwell: TimeInterval = 0.5
+    static let eyeFlowSwitchDwell: TimeInterval = 0.15
+    static let eyeFlowReleaseDwell: TimeInterval = 1.7
+    static let eyeActivityEnter = 0.15
+    static let eyeActivityExit = 0.07
+    static let eyeTurnWidthRatio = 0.6
+    static let eyeActivitySustain: TimeInterval = 0.45
+    static let eyeActivityClear: TimeInterval = 0.2
+    static let eyeActivityTau = 0.1             // detik, penghalus bukaan
+    static let eyeBaselineTau = 6.0             // detik, belajar baseline per mata
+    static let eyeActivityMaxYaw = 25.0
+    static let eyeLearnMaxYaw = 15.0
+    static let eyeUnknownCap: TimeInterval = 3.0 
 }
 
 /// Hasil deteksi lengkap dengan cap waktu dan nomor urut yang bertambah.

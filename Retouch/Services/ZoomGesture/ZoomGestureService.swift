@@ -19,9 +19,9 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
 
     // State: hanya diakses di stateQueue
     private var headPose: HeadPoseRecognizer
-    private var turnAnchor: Double          // turnPeak di awal pemakaian, batas geser belajar per sesi
+    private var turnAnchor: Double
     private var pitchRecognizer: HeadPitchRecognizer
-    private var handProximity: HandProximityRecognizer
+//    private var handProximity: HandProximityRecognizer
     private var resolver: ZoomGestureResolver
     private var faceTracker = FacePointTracker()
     private var pacer = DetectionPacer()
@@ -36,7 +36,7 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
     private var lastHand: CGPoint?
     
     // Zoom bibir satu alur. lipsTracker hanya dipakai untuk trackHand (penghalus dan kecepatan tangan, pose 2 atau 3 jari)
-    private var lipsTracker = HandProximityRecognizer()
+//    private var lipsTracker = HandProximityRecognizer()
     private var lipFlow = LipsZoomFlow()
     private var lipMotion = LipMotionRecognizer()
     private var lipsInput = LipsZoomFlow.Input()
@@ -49,6 +49,11 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
     private var prevFaceTime = Date.distantPast
     private var eventLog = ZoomEventLog()
     private var lastLoggedTarget: ZoomTarget = .fullFace
+    private var handBank = HandTrackBank()
+    private var hands: [TrackedHand] = []
+    private var eyeFlow = EyeZoomFlow()
+    private var eyeActivity = EyeActivityRecognizer()
+    private var eyeInput = EyeZoomFlow.Input()
 
     // Pinch
     private var pinchScale: CGFloat = 1
@@ -83,13 +88,14 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         var profile = HandProfileStore.load()
         profile.beginSession()   // nilai tersimpan jadi titik awal; belajar hanya boleh geser sedikit dari sini
         handProfile = profile
-        handProximity = HandProximityRecognizer(profile: profile)
-        lipsTracker = HandProximityRecognizer(profile: profile)
+//        handProximity = HandProximityRecognizer(profile: profile)
+//        lipsTracker = HandProximityRecognizer(profile: profile)
         resolver = ZoomGestureResolver()
         let head = HeadPoseRecognizer(profile: HeadProfileStore.load())
         headPose = head
         turnAnchor = head.turnAnchor
         pitchRecognizer = HeadPitchRecognizer(profile: PitchProfileStore.load())
+        handBank.apply(profile)
     }
 
     private func makeResolver() -> ZoomGestureResolver {
@@ -104,8 +110,10 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         HeadPitchRecognizer(profile: pitchRecognizer.profile)
     }
 
-    private func makeHandProximity() -> HandProximityRecognizer {
-        HandProximityRecognizer(profile: handProfile)
+    private func makeHandBank() -> HandTrackBank {
+        var bank = HandTrackBank()
+        bank.apply(handProfile)
+        return bank
     }
 
     /// Buang hasil deteksi lama yang tersimpan di service (bukan di detektor).
@@ -117,12 +125,14 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         handTarget = nil
         headTarget = nil
         prevFace = nil
-        lastAllTips = []
-        lipsTracker = makeHandProximity()
+        handBank = makeHandBank()
+        hands = []
         lipFlow = LipsZoomFlow()
         lipMotion = LipMotionRecognizer()
         lipsInput = LipsZoomFlow.Input()
-        lipsHand = nil
+        eyeFlow = EyeZoomFlow()
+        eyeActivity = EyeActivityRecognizer()
+        eyeInput = EyeZoomFlow.Input()
     }
 
     /// Anggap semua hasil deteksi yang ada sekarang sudah dibaca, supaya hasil lama tidak diproses ulang.
@@ -162,7 +172,7 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         stateQueue.async { [self] in
             headPose = makeHeadPose()
             pitchRecognizer = makePitch()
-            handProximity = makeHandProximity()
+//            handProximity = makeHandProximity()
             faceTracker = FacePointTracker()
             resolver = makeResolver()
             clearCachedDetections()
@@ -213,7 +223,7 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
             isGestureEnabled = isEnabled
             headPose = makeHeadPose()   // hasil belajar tetap
             pitchRecognizer = makePitch()
-            handProximity = makeHandProximity()
+//            handProximity = makeHandProximity()
             resolver = makeResolver()
             clearCachedDetections()
             manualTarget = .fullFace
@@ -292,14 +302,12 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
 
         if handUnwanted {
             handProfile.learnUnwanted()
-            handProximity.apply(handProfile)
-            lipsTracker.apply(handProfile)
+            handBank.apply(handProfile)
         } else if sideUnwanted {
             headPose.noteUnwantedSide()
         } else {
             handProfile.learnMissed()
-            handProximity.apply(handProfile)
-            lipsTracker.apply(handProfile)
+            handBank.apply(handProfile)
         }
         lastCorrection = now
     }
@@ -350,29 +358,18 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
 
         let H = viewSize.height
 
-        // 1. Tangan: dilacak hanya saat ada deteksi tangan baru
+        // 1. Tangan: semua tangan dilacak, hanya saat ada deteksi tangan baru
         if let handSnap {
             lastScan = handSnap.value
-            // Jalur mata: hanya pose 3 jari, sama seperti sebelumnya
-            lastTips = lastScan.threeFingerGrips.map { converter.toView($0.tip) }
-            lastHand = handProximity.trackHand(lastTips, points: faceTracker.points,
-                                               viewHeight: H, now: handSnap.timestamp)
-            // Jalur bibir: pose 2 atau 3 jari
-            lastAllTips = lastScan.grips.map { converter.toView($0.tip) }
-            lipsHand = lipsTracker.trackHand(lastAllTips, points: faceTracker.points,
-                                             viewHeight: H, now: handSnap.timestamp)
-        }
-        var covering = handProximity.isCovering(hand: lastHand, points: faceTracker.points)
-        // Tangan pose 2 jari atau jari yang sedang menahan zoom bibir juga menutupi bibir: titik wajah dibekukan
-        if !covering {
-            let fp = faceTracker.points
-            if let h = lipsHand, let lips = fp.lips, fp.width > 0,
-               hypot(h.x - lips.x, h.y - lips.y) / fp.width < ZoomTuning.coverDistance {
-                covering = true
-            } else if lipFlow.isActive && lipsInput.fingerNear {
-                covering = true
+            lastTips = lastScan.grips.map { converter.toView($0.tip) }
+            let candidates = lastScan.grips.map {
+                HandTrackBank.Candidate(tip: converter.toView($0.tip), pose2: $0.twoFinger, pose3: $0.threeFinger)
             }
+            hands = handBank.update(candidates, faceWidth: faceTracker.points.width, viewHeight: H,
+                                    now: handSnap.timestamp)
+            lastHand = nearestHandPoint(faceTracker.points)
         }
+        let covering = isCovering(points: faceTracker.points)
 
         // 2. Titik wajah: diperbarui hanya saat ada deteksi wajah baru
         var points = faceTracker.points
@@ -382,48 +379,57 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
                                         now: faceSnap.timestamp)
         }
 
-        // 3. Keputusan tangan: hanya saat ada deteksi tangan baru
+        // 3. Masukan flow mata dan bibir dari tangan: hanya saat ada deteksi tangan baru
         if let handSnap {
+            _ = handSnap
             let support = ZoomTuning.pitchEnabled && ZoomTuning.pitchHandSupportEnabled && pitchRecognizer.isLifted
-            let raw = handProximity.update(hand: lastHand, points: points, headSupport: support,
-                                           now: handSnap.timestamp)
-            // Bibir tidak lagi diputuskan di sini, tapi oleh LipsZoomFlow. Mata tidak berubah.
-            handTarget = raw == .lips ? nil : raw
+            eyeInput = eyeReadiness(points: points, converter: converter, support: support)
             lipsInput = lipsReadiness(points: points, converter: converter, support: support)
         }
 
-        // 4. Keputusan kepala: hanya saat ada deteksi wajah baru
+        // 4. Keputusan kepala dan sinyal aktivitas (bibir, mata): hanya saat ada deteksi wajah baru
         if let faceSnap {
-            let learn = !learningPaused && handTarget == nil && !lipFlow.isActive
+            let learn = !learningPaused && !eyeFlow.isActive && !lipFlow.isActive
             let faceForHead = covering ? nil : faceSnap.value
             let freezesBefore = pitchRecognizer.freezeCount
             pitchRecognizer.update(face: faceForHead, learn: learn, covered: covering, now: faceSnap.timestamp)
             if pitchRecognizer.freezeCount > freezesBefore {
                 eventLog.noteFreezes(pitchRecognizer.freezeCount - freezesBefore)
             }
-            // Dongak/tunduk cepat: tahan keputusan yaw dan jangan belajar, supaya tidak ada zoom samping palsu
             let freeze = ZoomTuning.pitchEnabled && ZoomTuning.pitchYawFreezeEnabled
                 && pitchRecognizer.isFrozen(now: faceSnap.timestamp)
-            lipMotion.update(face: faceForHead, ignore: freeze, now: faceSnap.timestamp)
             headTarget = headPose.update(face: faceForHead, learn: learn && !freeze, covered: covering,
                                          yawFrozen: freeze, now: faceSnap.timestamp)
+            lipMotion.update(face: faceForHead, ignore: freeze, now: faceSnap.timestamp)
+            eyeActivity.update(face: faceForHead, learn: learn && !covering, ignore: freeze,
+                               now: faceSnap.timestamp)
         }
-        
-        trackMotion(face: faceSnap != nil ? lastFace : nil, hand: lastHand ?? lipsHand, at: now,
+        trackMotion(face: faceSnap != nil ? lastFace : nil, hand: lastHand, at: now,
                     faceChecked: faceSnap != nil)
 
-        // Zoom bibir: mata yang aktif selalu menang (satu target aktif), flow bibir dibatalkan
-        if handTarget != nil {
-            lipFlow.cancel()
-        } else {
-            var input = lipsInput
-            input.lipsMoving = lipMotion.isMoving
-            lipFlow.update(input, now: now)
+        // 5. Flow mata dan bibir. Satu target aktif: yang baru jadi aktif mengambil alih, yang lain dibatalkan.
+        let eyeWas = eyeFlow.isActive
+        let lipWas = lipFlow.isActive
+        var eyeIn = eyeInput
+        eyeIn.activityLeft = eyeActivity.leftState
+        eyeIn.activityRight = eyeActivity.rightState
+        eyeFlow.update(eyeIn, now: now)
+        var lipIn = lipsInput
+        lipIn.lipsMoving = lipMotion.isMoving
+        lipFlow.update(lipIn, now: now)
+        if eyeFlow.isActive && lipFlow.isActive {
+            if !eyeWas {
+                lipFlow.cancel()
+            } else if !lipWas {
+                eyeFlow.cancel()
+            } else {
+                lipFlow.cancel()
+            }
         }
+        handTarget = eyeFlow.target
 
         let target = resolver.resolve(hand: handTarget, lips: lipFlow.isActive, head: headTarget,
                                       covering: covering, headStraight: headPose.isStraight, now: now)
-
         // Catat kapan auto zoom (mata/bibir) mulai dan selesai, bahan untuk membaca koreksi manual
         let handDriven = target == .leftEye || target == .rightEye || target == .lips
         if handDriven, autoZoomSince == nil { autoZoomSince = now }
@@ -452,14 +458,13 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
 
         publish(target)
         
-        let threeGrips = lastScan.threeFingerGrips
         var grip: CGPoint?
         if let hand = lastHand,
            let index = lastTips.indices.min(by: {
                hypot(lastTips[$0].x - hand.x, lastTips[$0].y - hand.y)
                    < hypot(lastTips[$1].x - hand.x, lastTips[$1].y - hand.y)
            }), index < lastScan.grips.count {
-            grip = converter.toView(threeGrips[index].grip)
+            grip = converter.toView(lastScan.grips[index].grip)
         }
         sendDebug(target: target, tip: lastHand, grip: grip, points: points,
                   scan: lastScan, face: lastFace, handFps: handFps, now: now)
@@ -490,30 +495,75 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         let W = points.width
         guard W > 0, let lips = points.lips else { return input }
         let eyes = [points.leftEye, points.rightEye].compactMap { $0 }
+        let zones = EyeZones(points: points)
         func dist(_ a: CGPoint, _ b: CGPoint) -> CGFloat { hypot(a.x - b.x, a.y - b.y) }
-
-        let holdRadius = CGFloat(ZoomTuning.lipsHoldRadius)
-        input.fingerNear = lastScan.fingertips.contains { raw in
-            let p = converter.toView(raw)
-            let dLips = dist(p, lips)
-            let dEye = eyes.map { dist(p, $0) }.min() ?? .infinity
-            return dLips < dEye && dLips / W < holdRadius
+        func ownedByLips(_ p: CGPoint) -> Bool {
+            if let zones { return zones.isLipsSide(p) }
+            return dist(p, lips) < (eyes.map { dist(p, $0) }.min() ?? .infinity)
         }
 
-        guard let hand = lipsHand,
-              let idx = lastAllTips.indices.min(by: { dist(lastAllTips[$0], hand) < dist(lastAllTips[$1], hand) }),
-              idx < lastScan.grips.count else { return input }
-        let dLips = dist(hand, lips) / W
-        let dEye = (eyes.map { dist(hand, $0) }.min() ?? .infinity) / W
-        var limit = lipsTracker.enterDistance
+        let holdRadius = CGFloat(ZoomTuning.lipsHoldRadius)
+        let tips = lastScan.fingertips.map { converter.toView($0) } + hands.map { $0.point }
+        input.fingerNear = tips.contains { ownedByLips($0) && dist($0, lips) / W < holdRadius }
+
+        var limit = CGFloat(handProfile.enterDistance)
         if support { limit *= ZoomTuning.pitchLipsReach }
-        let intent = dLips < limit
-            && lipsTracker.speed < lipsTracker.maxIntentSpeed
-            && dEye - dLips >= lipsTracker.winMargin
-        let grip = lastScan.grips[idx]
-        input.pose2Ready = intent && grip.twoFinger
-        input.pose3Ready = intent && grip.threeFinger
+        for h in hands where h.hasPose {
+            let dLips = dist(h.point, lips) / W
+            let dEye = (eyes.map { dist(h.point, $0) }.min() ?? .infinity) / W
+            let intent = dLips < limit
+                && h.speed < handBank.maxIntentSpeed
+                && dEye - dLips >= ZoomTuning.handWinMargin
+            if intent {
+                if h.pose2 { input.pose2Ready = true }
+                if h.pose3 { input.pose3Ready = true }
+            }
+        }
         return input
+    }
+
+    private func eyeReadiness(points: FacePoints, converter: CoordinateConverter, support: Bool) -> EyeZoomFlow.Input {
+        var input = EyeZoomFlow.Input()
+        let W = points.width
+        guard W > 0, var zones = EyeZones(points: points) else { return input }
+        zones.triggerScale = min(CGFloat(handProfile.enterDistance / ZoomTuning.handEnterDistance), 1.1)
+        if support { input.enterDwellFactor = ZoomTuning.pitchEyeDwellFactor }   // radius tidak diperlebar, hanya dwell
+
+        for h in hands where h.hasPose && h.speed < handBank.maxIntentSpeed {
+            guard let side = zones.triggerEye(at: h.point) else { continue }
+            if let lips = points.lips, let eye = side == .left ? points.leftEye : points.rightEye {
+                let dEye = hypot(h.point.x - eye.x, h.point.y - eye.y) / W
+                let dLips = hypot(h.point.x - lips.x, h.point.y - lips.y) / W
+                guard dLips - dEye >= ZoomTuning.handWinMargin else { continue }
+            }
+            if side == .left { input.poseLeft = true } else { input.poseRight = true }
+        }
+
+        let tips = lastScan.fingertips.map { converter.toView($0) } + hands.map { $0.point }
+        for p in tips {
+            if zones.holds(.left, at: p) { input.holdLeft = true }
+            if zones.holds(.right, at: p) { input.holdRight = true }
+        }
+        return input
+    }
+
+    private func isCovering(points: FacePoints) -> Bool {
+        let W = points.width
+        guard W > 0 else { return false }
+        let anchors = points.handTargets.map { $0.1 }
+        let near = hands.contains { h in
+            anchors.contains { hypot(h.point.x - $0.x, h.point.y - $0.y) / W < ZoomTuning.coverDistance }
+        }
+        return near || (lipFlow.isActive && lipsInput.fingerNear)
+    }
+
+    private func nearestHandPoint(_ points: FacePoints) -> CGPoint? {
+        let anchors = points.handTargets.map { $0.1 }
+        guard !anchors.isEmpty else { return hands.first?.point }
+        func nearest(_ h: TrackedHand) -> CGFloat {
+            anchors.map { hypot(h.point.x - $0.x, h.point.y - $0.y) }.min() ?? .infinity
+        }
+        return hands.min { nearest($0) < nearest($1) }?.point
     }
 
     /// Kirim target ke animator. Pinch mengalahkan semua gesture.
@@ -574,7 +624,7 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
             headPose = HeadPoseRecognizer(profile: freshHead)
             turnAnchor = headPose.turnAnchor
             pitchRecognizer = HeadPitchRecognizer(profile: PitchProfile())
-            handProximity = makeHandProximity()
+//            handProximity = makeHandProximity()
             resolver = makeResolver()
             clearCachedDetections()
             lastCorrection = .distantPast
@@ -612,7 +662,11 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         if new != .fullFace { return "pindah ke \(new.debugName)" }
         if case .faceSide = old { return "kepala rileks atau wajah hilang" }
         if old == .lips { return String(format: "penahan bibir hilang %.1fs", ZoomTuning.lipsReleaseDwell) }
-        return String(format: "tangan hilang, jeda %.1fs habis", resolver.exitHold)
+        if old == .lips { return String(format: "penahan bibir hilang %.1fs", ZoomTuning.lipsReleaseDwell) }
+        if old == .leftEye || old == .rightEye {
+            return String(format: "penahan mata hilang %.1fs", ZoomTuning.eyeFlowReleaseDwell)
+        }
+        return "tangan hilang"
     }
 
     /// Status kepala untuk debug overlay: yaw + pitch (untuk memeriksa apakah yaw ikut bergeser saat dongak).

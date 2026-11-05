@@ -103,6 +103,19 @@ nonisolated final class FaceLandmarkDetector: @unchecked Sendable {
                                   aspect: aspect)
         }
         
+        var leftOpen = Double.nan
+        var rightOpen = Double.nan
+        var widthRatio = Double.nan
+        let shapes = [lm.leftEye, lm.rightEye].compactMap { region -> (c: CGPoint, pts: [CGPoint])? in
+            guard let pts = region?.normalizedPoints, pts.count >= 4, let c = center(region) else { return nil }
+            return (c, pts.map(point))
+        }.sorted { $0.c.x < $1.c.x }
+        if shapes.count == 2, let r = estimateEyeOpen(shapes[0].pts, shapes[1].pts, aspect: aspect) {
+            leftOpen = r.left
+            rightOpen = r.right
+            widthRatio = r.widthRatio
+        }
+        
         return FaceObservation(
             leftEye: leftEye,
             rightEye: rightEye,
@@ -114,12 +127,14 @@ nonisolated final class FaceLandmarkDetector: @unchecked Sendable {
             pitch: pitch,
             mouthWidth: mouth?.width ?? .nan,
             mouthHeight: mouth?.height ?? .nan,
-            mouthGap: mouth?.gap ?? .nan
+            mouthGap: mouth?.gap ?? .nan,
+            leftEyeOpen: leftOpen,
+            rightEyeOpen: rightOpen,
+            visibleEyes: eyes.count,
+            eyeWidthRatio: widthRatio
         )
     }
 
-    /// Bentuk bibir dalam satuan jarak antar mata, searah garis mata (lebar) dan tegak lurusnya (tinggi),
-    /// jadi ikut benar kalau kepala miring dan tidak terpengaruh jarak ke kamera.
     private func estimateMouth(leftEye l: CGPoint, rightEye r: CGPoint,
                                outer: [CGPoint], inner: [CGPoint],
                                aspect: CGFloat) -> (width: Double, height: Double, gap: Double)? {
@@ -140,9 +155,31 @@ nonisolated final class FaceLandmarkDetector: @unchecked Sendable {
                 gap: inner.count >= 2 ? span(inner, vx, vy) : 0)
     }
     
-    /// Hidung menonjol ke depan, jadi saat dagu naik ujung hidung terlihat bergeser ke arah mata.
-    /// Diukur sebagai posisi hidung di antara garis mata dan bibir, searah sumbu "turun" wajah
-    /// (tegak lurus garis mata, jadi ikut benar kalau kepala miring). Positif = mendongak.
+    private func estimateEyeOpen(_ a: [CGPoint], _ b: [CGPoint], aspect: CGFloat)
+        -> (left: Double, right: Double, widthRatio: Double)? {
+        func iso(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x * aspect, y: p.y) }
+        func mean(_ pts: [CGPoint]) -> CGPoint {
+            let q = pts.map(iso)
+            return CGPoint(x: q.reduce(0) { $0 + $1.x } / CGFloat(q.count),
+                           y: q.reduce(0) { $0 + $1.y } / CGFloat(q.count))
+        }
+        let ca = mean(a), cb = mean(b)
+        let len = hypot(cb.x - ca.x, cb.y - ca.y)
+        guard len > 0 else { return nil }
+        let ux = (cb.x - ca.x) / len, uy = (cb.y - ca.y) / len
+        let vx = uy, vy = -ux
+        func shape(_ pts: [CGPoint]) -> (open: Double, width: Double)? {
+            let q = pts.map(iso)
+            let along = q.map { $0.x * ux + $0.y * uy }
+            let across = q.map { $0.x * vx + $0.y * vy }
+            guard let aMax = along.max(), let aMin = along.min(),
+                  let cMax = across.max(), let cMin = across.min(), aMax - aMin > 0 else { return nil }
+            return (Double((cMax - cMin) / (aMax - aMin)), Double(aMax - aMin))
+        }
+        guard let l = shape(a), let r = shape(b), max(l.width, r.width) > 0 else { return nil }
+        return (l.open, r.open, min(l.width, r.width) / max(l.width, r.width))
+    }
+    
     private func estimatePitch(leftEye l: CGPoint, rightEye r: CGPoint, nose: CGPoint?,
                                mouth: CGPoint?, aspect: CGFloat) -> Double {
         guard let nose, let mouth else { return .nan }

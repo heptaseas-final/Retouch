@@ -24,8 +24,7 @@ nonisolated struct ZoomGestureResolver {
 
     mutating func resolve(hand: ZoomTarget?, lips: Bool, head: ZoomTarget?, covering: Bool,
                           headStraight: Bool, now: Date) -> ZoomTarget {
-        // Mata datang dari recognizer tangan. Bibir datang dari LipsZoomFlow, yang sudah menghitung
-        // masuk (0,5 dtk) dan lepas (2 dtk) sendiri, jadi di sini tidak ada dwell atau jeda tambahan untuk bibir.
+        // Mata datang dari EyeZoomFlow, bibir dari LipsZoomFlow. Keduanya sudah menghitung masuk dan lepas sendiri.
         let handCandidate: ZoomTarget? = hand ?? (lips ? .lips : nil)
         if handCandidate != nil { lastHandSeen = now }
         let handDriven = Self.isHandTarget(target)
@@ -40,8 +39,8 @@ nonisolated struct ZoomGestureResolver {
 
         guard let candidate = handCandidate ?? (headAllowed ? head : nil) else {
             pending = nil
-            // Bibir: LipsZoomFlow sudah menunggu 2 detik, langsung turun
-            if target == .lips {
+            // Mata/bibir: flow sudah menunggu lepasnya sendiri, langsung turun
+            if Self.isHandTarget(target) {
                 zoomOut(at: now)
                 return target
             }
@@ -59,8 +58,8 @@ nonisolated struct ZoomGestureResolver {
         }
         if pending?.target != candidate { pending = (candidate, now) }
 
-        let isFirst = target == .fullFace
-        let dwell: TimeInterval = (candidate == .lips || isFirst) ? 0 : switchDwell
+        // Dwell mata/bibir sudah ada di flow. Dwell di sini hanya untuk pindah antar sisi wajah (kepala).
+        let dwell: TimeInterval = (Self.isHandTarget(candidate) || target == .fullFace) ? 0 : switchDwell
         if let p = pending, now.timeIntervalSince(p.since) >= dwell {
             target = candidate
             pending = nil

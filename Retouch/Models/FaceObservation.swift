@@ -12,4 +12,8 @@ nonisolated struct FaceObservation {
     var mouthWidth: Double = .nan    // lebar bibir luar / jarak antar mata
     var mouthHeight: Double = .nan   // tinggi bibir luar / jarak antar mata
     var mouthGap: Double = .nan      // bukaan bibir dalam / jarak antar mata
+    var leftEyeOpen: Double = .nan   // tinggi / lebar kontur mata kiri layar
+    var rightEyeOpen: Double = .nan  // sama, mata kanan layar
+    var visibleEyes = 2              // jumlah mata yang terbaca (0 sampai 2)
+    var eyeWidthRatio: Double = .nan 
 }
