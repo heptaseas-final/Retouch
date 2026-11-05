@@ -13,12 +13,54 @@ final class MirrorRenderer {
         lock.withLock { layer != nil && drawableSize.width > 0 && drawableSize.height > 0 }
     }
 
+    /// enhanced mode off
+    var enhancementOn: Bool {
+        get { lock.withLock { _enhancementOn } }
+        set { lock.withLock { _enhancementOn = newValue } }
+    }
+    /// Tambahan (peredam gyro): geseran dalam piksel drawable untuk frame yang sedang digambar. Nil = tidak aktif.
+    var frameShift: FrameShiftProvider? {
+        get { lock.withLock { () -> FrameShiftProvider? in _frameShift } }
+        set { lock.withLock { _frameShift = newValue } }
+    }
+
+    /// Opacity of the border at its outer edge.
+    var maxFlashAlpha = 1.0
+    var flashOnEasing = 0.4
+    var flashOffEasing = 0.12
+    var maxThicknessFraction: CGFloat = 0.12
+    var featherFraction: CGFloat = 0.4
+    var faceDetectionInterval = 3
+    var tune = EnhanceTune.fixed
+
+    private static let displayP3 = CGColorSpace(name: CGColorSpace.displayP3)!
+
     private let device: MTLDevice?
     private let context: CIContext?
     private let makeupLook: MakeupLook?
     private let colorSpace = CGColorSpace(name: CGColorSpace.displayP3)!
 
     private let lock = NSLock()
+    private var _targetLevel = 0.0
+    private var _flashColor = CIColor(red: 1, green: 1, blue: 1)
+    private var _enhancementOn = false
+    private var _frameShift: FrameShiftProvider?
+    private var layer: CAMetalLayer?
+    private var drawableSize: CGSize = .zero
+    
+    private var frameCount = 0
+    private var flash = 0.0
+    private var gradeCache: [ColorGrade: Data] = [:]
+    private var smoothedFace: CGRect?     // ter-normalisasi (0...1) pada frame upright
+    private var faceWeight = 0.0
+    
+    typealias FrameShiftProvider = @Sendable (CGFloat) -> CGSize
+
+    init(faceTracker: FaceTracker) {
+        self.faceTracker = faceTracker
+        device = MTLCreateSystemDefaultDevice()
+        queue = device?.makeCommandQueue()
+        context = device.map { CIContext(mtlDevice: $0, options: [.cacheIntermediates: false]) }
     private var layer: CAMetalLayer?
     private var drawableSize: CGSize = .zero
     private var pointScale: CGFloat = 1

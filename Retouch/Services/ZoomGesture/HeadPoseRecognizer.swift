@@ -1,86 +1,131 @@
 import Foundation
 
 nonisolated struct HeadPoseRecognizer {
-    var turnEnter = 20.0            // derajat
-    var turnExit = 10.0
-    var downEnter = 0.05            // kenaikan rasio hidung-mata dari posisi lurus
-    var downExit = 0.025
-    var turnDwell: TimeInterval = 0.5
-    var downDwell: TimeInterval = 1.0
-    var ratioSmoothing = 0.3
-    var yawSmoothing = 0.4
+    var defaultTurnEnter = 20.0     // derajat, untuk pengguna baru
+    var minTurnEnter = ZoomTuning.minTurnEnter   // derajat, batas bawah ambang masuk (naik dari 14)
+    var maxTurnEnter = 24.0
+    var turnDwell: TimeInterval = ZoomTuning.sideEnterDwell      // noleh harus bertahan sebelum masuk
+    var turnExitDwell: TimeInterval = ZoomTuning.sideExitDwell   // rileks harus bertahan sebelum keluar
+    var yawTau = ZoomTuning.yawTau  // detik, penghalus yaw berbasis waktu
     var maxYawRate = 60.0           // derajat/detik; lebih cepat dari ini dianggap masih bergerak
     var yawSign = 1.0               // ganti -1 kalau zoom noleh ke sisi yang salah
-    var pitchSign = 1.0             // ganti -1 kalau menunduk tidak terdeteksi
-    var isForeheadEnabled = false
-    var holdRelease: TimeInterval = 0.8   // dahi nyangkut di zona hysteresis selama ini: lepas dan belajar ulang baseline
-    var blendFull = 28.0            // derajat, progress sisi wajah penuh (mulai naik dari turnExit)
-    var blendTau = 0.1              // detik, makin kecil makin cepat
+    var lostGrace: TimeInterval = 0.8   // wajah hilang sesingkat ini: zoom ditahan, bukan dilepas
+    var coverGrace: TimeInterval = ZoomTuning.coverGrace   // sama, tapi saat tangan/brush menutupi wajah (ada batasnya)
+    var maxBaseline = 8.0           // batas geser posisi "lurus" yang boleh dipelajari
+    var baselineTau = 6.0           // detik, makin besar makin pelan belajarnya
 
+    private(set) var profile: HeadProfile
     private(set) var current: ZoomTarget?
-    private(set) var lastDown = 0.0
-    private(set) var lastRatio = 0.0
-    /// 0...1, seberapa jauh zoom sisi wajah berjalan
-    private(set) var sideProgress: CGFloat = 0
-    /// Sisi yang masih tampil, nil kalau progress sudah habis
-    private(set) var sideShown: FaceSide?
-    var baselineValue: Double { baseline ?? 0 }
+    /// Kepala sedang di zona lurus (terbaca wajahnya, yaw di bawah sudut keluar, tidak sedang dibekukan).
+    /// Salah kalau wajah tidak terbaca. Dipakai resolver untuk membuka kunci zoom samping.
+    private(set) var isStraight = false
+
+    /// Nilai `turnPeak` di awal pemakaian app. Total geser per sesi dibatasi di sekitar nilai ini
+    /// (`ZoomTuning.turnLearnSessionCap`), walau recognizer dibuat ulang saat reset sesi.
+    let turnAnchor: Double
 
     private var pending: (target: ZoomTarget, since: Date)?
-    private var baseline: Double?
-    private var smoothedRatio: Double?
+    private var exitPending: Date?
     private var smoothedYaw: Double?
     private var lastTime: Date?
-    private var heldSide: FaceSide?
-    private var blendTime: Date?
-    private var releaseSince: Date?
-    private var relearnUntil = Date.distantPast
+    private var lastSeen: Date?
+    private var episodeStart: Date?
+    private var episodePeak = 0.0
+    private var episodeSettled: TimeInterval = 0   // lama noleh yang sudah menetap (kepala tidak sedang bergerak)
 
-    mutating func update(face: FaceObservation?, now: Date) -> ZoomTarget? {
-        guard let face, face.pitchRatio.isFinite else {
-            reset()
-            return nil
-        }
-        let dt = max(lastTime.map { now.timeIntervalSince($0) } ?? 0.033, 0.001)
+    // Catatan langkah terakhir, dipakai trackEpisode
+    private var sawFace = false
+    private var stepDt: TimeInterval = 0
+    private var stepYawRate = 0.0
+
+    init(profile: HeadProfile = HeadProfile(), turnAnchor: Double? = nil) {
+        var p = profile
+        p.yawBaseline = min(max(p.yawBaseline, -8), 8)
+        if p.turnPeak != 0 { p.turnPeak = min(max(p.turnPeak, 20), 45) }
+        self.profile = p
+        self.turnAnchor = turnAnchor ?? (p.turnPeak > 0 ? p.turnPeak : ZoomTuning.turnPeakDefault)
+    }
+
+    // Ambang mengikuti kebiasaan noleh pengguna. Tanpa data: 20 derajat masuk, setengahnya keluar.
+    private var enterAngle: Double {
+        guard profile.turnPeak > 0 else { return defaultTurnEnter }
+        return min(max(profile.turnPeak * 0.6, minTurnEnter), maxTurnEnter)
+    }
+    private var exitAngle: Double { enterAngle * 0.5 }
+    private var relativeYaw: Double { (smoothedYaw ?? 0) - profile.yawBaseline }
+
+    /// Dipanggil hanya saat ada hasil deteksi wajah baru. `now` = cap waktu deteksi itu.
+    /// `learn` = boleh belajar posisi lurus (false saat belajar dijeda atau tangan sedang aktif).
+    /// `covered` = wajah sengaja tidak diberikan karena tangan/brush menutupinya, jadi hilangnya data
+    /// ditahan lebih lama (`coverGrace`) dan tidak dianggap user selesai.
+    /// `yawFrozen` = kepala sedang dongak/tunduk cepat, yaw tidak bisa dipercaya: keputusan ditahan.
+    mutating func update(face: FaceObservation?, learn: Bool, covered: Bool = false,
+                         yawFrozen: Bool = false, now: Date) -> ZoomTarget? {
+        let before = current
+        sawFace = false
+        isStraight = false
+        let result = step(face: face, learn: learn, covered: covered, yawFrozen: yawFrozen, now: now)
+        trackEpisode(before: before, now: now)
+        return result
+    }
+
+    /// Pengguna zoom out manual tak lama setelah zoom samping muncul: naikkan sedikit ambang noleh.
+    /// Naiknya dibatasi per sesi dan tidak pernah menurunkan nilai.
+    mutating func noteUnwantedSide() {
+        let old = profile.turnPeak > 0 ? profile.turnPeak : ZoomTuning.turnPeakDefault
+        let limit = min(turnAnchor + ZoomTuning.turnLearnSessionCap, 45)
+        profile.turnPeak = max(old, min(old + ZoomTuning.turnUnwantedStep, limit))
+    }
+
+    private mutating func step(face: FaceObservation?, learn: Bool, covered: Bool,
+                               yawFrozen: Bool, now: Date) -> ZoomTarget? {
+        guard let face, face.yaw.isFinite else { return holdWhileLost(covered: covered, now: now) }
+        lastSeen = now
+        let dt = max(lastTime.map { now.timeIntervalSince($0) } ?? ZoomTuning.nominalStep, 0.001)
         lastTime = now
 
         let rawYaw = face.yaw * yawSign
         let previousYaw = smoothedYaw ?? rawYaw
-        let yaw = previousYaw + yawSmoothing * (rawYaw - previousYaw)
-        smoothedYaw = yaw
-        let yawRate = abs(yaw - previousYaw) / dt
+        // Penghalus berbasis waktu: hasilnya sama berapa pun laju deteksinya
+        let alpha = 1 - exp(-min(dt, ZoomTuning.maxStep) / yawTau)
+        let smoothed = previousYaw + alpha * (rawYaw - previousYaw)
+        smoothedYaw = smoothed
+        let yawRate = abs(smoothed - previousYaw) / dt
 
-        let ratio = smoothedRatio.map { $0 + ratioSmoothing * (face.pitchRatio - $0) } ?? face.pitchRatio
-        smoothedRatio = ratio
-        lastRatio = ratio
-        let down = (ratio - (baseline ?? ratio)) * pitchSign
-        lastDown = down
-
-        // Dahi nyangkut: kepala sudah balik tapi down masih di zona hysteresis. Lepas saja, baseline dipelajari
-        // lebih cepat sebentar. Baseline TIDAK di-set ke pose sekarang, supaya pose menunduk tidak ikut jadi "lurus".
-        if current == .forehead, down < downEnter, down >= downExit {
-            let since = releaseSince ?? now
-            releaseSince = since
-            if now.timeIntervalSince(since) >= holdRelease {
-                current = nil
-                pending = nil
-                releaseSince = nil
-                relearnUntil = now.addingTimeInterval(1.5)
-            }
-        } else {
-            releaseSince = nil
-        }
-
-        // Posisi "lurus" hanya dipelajari saat kepala lurus, stabil, dan tidak ada kandidat gesture
-        if current == nil, pending == nil, abs(yaw) < turnExit, yawRate < maxYawRate {
-            learnBaseline(ratio, fast: abs(down) < downEnter * 0.5, boost: now < relearnUntil)
-        }
-
-        guard let raw = classify(yaw: yaw, down: down) else {
-            current = nil
+        // Dongak/tunduk cepat bisa menggeser estimasi yaw: jangan putuskan apa pun, tahan yang sekarang
+        if yawFrozen {
             pending = nil
-            return nil
+            return current
         }
+        sawFace = true
+        stepDt = dt
+        stepYawRate = yawRate
+        isStraight = abs(relativeYaw) < exitAngle
+
+        // Posisi lurus hanya dipelajari saat kepala lurus, stabil, dan tidak ada gesture
+        if learn, current == nil, pending == nil,
+           abs(relativeYaw) < exitAngle, yawRate < maxYawRate / 3 {
+            let k = 1 - exp(-min(dt, ZoomTuning.maxStep) / baselineTau)
+            let moved = profile.yawBaseline + (smoothed - profile.yawBaseline) * k
+            profile.yawBaseline = min(max(moved, -maxBaseline), maxBaseline)
+        }
+
+        guard let raw = classify(relativeYaw) else {
+            pending = nil
+            guard current != nil else {
+                exitPending = nil
+                return nil
+            }
+            // Kepala sudah di zona rileks: zoom baru dilepas kalau bertahan selama dwell keluar,
+            // supaya kepala yang kembali lurus sebentar tidak langsung menurunkan zoom.
+            if exitPending == nil { exitPending = now }
+            if let since = exitPending, now.timeIntervalSince(since) >= turnExitDwell {
+                current = nil
+                exitPending = nil
+            }
+            return current
+        }
+        exitPending = nil
         if raw == current {
             pending = nil
             return current
@@ -90,62 +135,65 @@ nonisolated struct HeadPoseRecognizer {
             return current
         }
         if pending?.target != raw { pending = (raw, now) }
-        let dwell = raw == .forehead ? downDwell : turnDwell
-        if let p = pending, now.timeIntervalSince(p.since) >= dwell {
+        if let p = pending, now.timeIntervalSince(p.since) >= turnDwell {
             current = raw
             pending = nil
         }
         return current
     }
 
-    /// Haluskan zoom sisi wajah setelah gate lolos. `active` = sisi dari target final (nil kalau bukan sisi wajah).
-    /// Tidak mengubah keputusan gate, hanya menghasilkan sideProgress.
-    mutating func updateSideBlend(active: FaceSide?, now: Date) {
-        let dt = min(max(blendTime.map { now.timeIntervalSince($0) } ?? 0.033, 0.001), 0.1)
-        blendTime = now
-        if let active { heldSide = active }
-
-        var goal: CGFloat = 0
-        if active != nil, let yaw = smoothedYaw {
-            let raw = (abs(yaw) - turnExit) / (blendFull - turnExit)
-            goal = CGFloat(min(max(raw, 0), 1))
+    /// Wajah tidak terbaca (mata terpejam, tangan menutupi): tahan keputusan terakhir sebentar.
+    private mutating func holdWhileLost(covered: Bool, now: Date) -> ZoomTarget? {
+        let grace = covered ? max(lostGrace, coverGrace) : lostGrace
+        if let seen = lastSeen, now.timeIntervalSince(seen) < grace {
+            pending = nil
+            return current
         }
-        sideProgress += (goal - sideProgress) * CGFloat(1 - exp(-dt / blendTau))
+        reset()
+        return nil
+    }
 
-        if active == nil && sideProgress < 0.01 {
-            sideProgress = 0
-            heldSide = nil
+    /// Catat puncak noleh yang disengaja, lalu geser ambang pelan-pelan. Hanya noleh yang sudah menetap
+    /// (kepala diam di sudut itu) selama `turnLearnMinEpisode` yang dihitung; puncak diambil dari saat menetap.
+    private mutating func trackEpisode(before: ZoomTarget?, now: Date) {
+        if current != nil {
+            if before == nil {
+                episodeStart = now
+                episodePeak = 0
+                episodeSettled = 0
+            }
+            if sawFace, stepYawRate < maxYawRate / 3, abs(relativeYaw) >= exitAngle {
+                episodeSettled += min(stepDt, ZoomTuning.maxStep)
+                episodePeak = max(episodePeak, abs(relativeYaw))
+            }
+        } else if before != nil, episodeStart != nil {
+            episodeStart = nil
+            guard episodeSettled >= ZoomTuning.turnLearnMinEpisode else { return }
+            let old = profile.turnPeak > 0 ? profile.turnPeak : ZoomTuning.turnPeakDefault
+            let peak = min(max(episodePeak, 20), 45)
+            var moved = old + ZoomTuning.turnLearnStep * (peak - old)
+            // Batas total geser per sesi
+            moved = min(max(moved, turnAnchor - ZoomTuning.turnLearnSessionCap),
+                        turnAnchor + ZoomTuning.turnLearnSessionCap)
+            profile.turnPeak = min(max(moved, 20), 45)
         }
-        sideShown = sideProgress > 0.01 ? heldSide : nil
     }
 
     private mutating func reset() {
         current = nil
         pending = nil
+        exitPending = nil
         smoothedYaw = nil
-        smoothedRatio = nil
         lastTime = nil
-        releaseSince = nil
+        lastSeen = nil
+        episodeStart = nil
     }
 
-    private mutating func learnBaseline(_ value: Double, fast: Bool, boost: Bool) {
-        guard let b = baseline else {
-            baseline = value
-            return
-        }
-        baseline = b + (value - b) * (fast ? 0.05 : (boost ? 0.02 : 0.003))
-    }
-
-    private func classify(yaw: Double, down: Double) -> ZoomTarget? {
-        var turnLimit = turnEnter
-        if case .faceSide(_)? = current { turnLimit = turnExit }
-        if abs(yaw) >= turnLimit {
-            // Zoom ke sisi wajah yang menghadap kamera (berlawanan dengan arah hidung)
-            return .faceSide(yaw > 0 ? .left : .right)
-        }
-        // Menunduk hanya dihitung saat kepala tidak menoleh: noleh ikut mengubah rasio hidung-mata
-        guard isForeheadEnabled, abs(yaw) < turnExit else { return nil }
-        let downLimit = current == .forehead ? downExit : downEnter
-        return down >= downLimit ? .forehead : nil
+    private func classify(_ yaw: Double) -> ZoomTarget? {
+        // Hysteresis: masuk di sudut besar, keluar di sudut kecil
+        let limit = current == nil ? enterAngle : exitAngle
+        guard abs(yaw) >= limit else { return nil }
+        // Zoom ke sisi wajah yang menghadap kamera (berlawanan dengan arah hidung)
+        return .faceSide(yaw > 0 ? .left : .right)
     }
 }

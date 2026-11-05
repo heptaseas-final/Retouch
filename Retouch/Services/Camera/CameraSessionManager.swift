@@ -1,10 +1,3 @@
-//
-//  CameraSessionManager.swift
-//  Retouch
-//
-//  Created by Davin P on 26/10/26.
-//
-
 import AVFoundation
 import ImageIO
 
@@ -36,6 +29,8 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
     private let analysisQueue = DispatchQueue(label: "autolight.camera.analysis", qos: .userInitiated)
     private var device: AVCaptureDevice?
     private var videoConnection: AVCaptureConnection?
+    private var lastSampleTime: CFTimeInterval = 0
+    private var activeFOV: Double = 0
 
     private var isConfigured = false
     private var wantsRunning = false
@@ -142,6 +137,7 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
         enableStabilization(output.connection(with: .video), device)
 
         lockFrameRate(device)
+        activeFOV = Double(device.activeFormat.videoFieldOfView)
         configureFocus(device)
         configureColorAndExposure(device)
         
@@ -411,6 +407,27 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
     func captureOutput(_ output: AVCaptureOutput,
                        didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
+        guard let device else { return }
+        stepWhiteBalanceGlide(device)
+        if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+            FrameClock.shared.note(frameTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds,
+                                   bufferWidth: Double(CVPixelBufferGetWidth(pixelBuffer)),
+                                   bufferHeight: Double(CVPixelBufferGetHeight(pixelBuffer)),
+                                   hFOVDegrees: activeFOV)
+            onFrame?(pixelBuffer)
+        }
+
+        let now = CACurrentMediaTime()
+        guard now - lastSampleTime >= sampleInterval else { return }
+        lastSampleTime = now
+
+        let sample = LightSample(iso: Double(device.iso),
+                                 exposureDuration: device.exposureDuration.seconds,
+                                 aperture: Double(device.lensAperture),
+                                 exposureTargetOffset: Double(device.exposureTargetOffset),
+                                 current: Self.whiteBalance(device.deviceWhiteBalanceGains, device),
+                                 grayWorld: Self.whiteBalance(device.grayWorldDeviceWhiteBalanceGains, device))
+        DispatchQueue.main.async { self.onLightSample?(sample) }
         guard let device, let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let time = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
         let exposure = Self.exposure(of: sampleBuffer) ?? (device.exposureDuration.seconds, device.iso)
