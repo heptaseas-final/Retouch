@@ -3,7 +3,7 @@ name: Retouch
 options:
   bundleIdPrefix: bsd.iosda
   deploymentTarget:
-    iOS: "26.6"
+    iOS: "18.0"
   developmentLanguage: en
   createIntermediateGroups: true
 
@@ -13,6 +13,9 @@ settings:
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
     LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    MARKETING_VERSION: 1.0
+    CURRENT_PROJECT_VERSION: 1
+    
 
 targets:
   Retouch:
@@ -20,12 +23,13 @@ targets:
     platform: iOS
     sources:
       - path: Retouch
+      - path: RetouchWidgetExt/OpenRetouchIntent.swift
+    dependencies:
+      - target: RetouchWidgetExt
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: bsd.iosda.Retouch
-        PRODUCT_NAME: "Retouch: The Better Mirror"
-        MARKETING_VERSION: ${VERSION_NUMBER}
-        CURRENT_PROJECT_VERSION: ${BUILD_NUMBER}
+        PRODUCT_NAME: "Retouch"
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1"
         ENABLE_PREVIEWS: YES
@@ -37,9 +41,9 @@ targets:
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_CFBundleDisplayName: "Retouch"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_NSCameraUsageDescription: "Camera is used to track your face for the AR makeup tutorial."
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Microphone is used to listen to your 'next' and 'previous' voice commands."
-        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Speech recognition is used to understand your voice commands."
+        INFOPLIST_KEY_NSCameraUsageDescription: "Camera is used to show your face as a mirror and to detect hand gestures for zoom."
+        # INFOPLIST_KEY_NSMicrophoneUsageDescription: "Microphone is used to listen to your 'next' and 'previous' voice commands."
+        # INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Speech recognition is used to understand your voice commands."
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
 
@@ -76,12 +80,38 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: bsd.iosda.RetouchUITests
         GENERATE_INFOPLIST_FILE: YES
+  
+  RetouchWidgetExt:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: RetouchWidgetExt
+        excludes: ["Info.plist"]
+    info:
+      path: RetouchWidgetExt/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: bsd.iosda.Retouch.RetouchWidgetExt
+        PRODUCT_NAME: RetouchWidgetExt
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: "Retouch"
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SWIFT_VERSION: 5.0
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
 
 schemes:
   Retouch:
     build:
       targets:
         Retouch: all
+        RetouchWidgetExt: [run, test, profile, analyze, archive]
     test:
       config: Debug
       targets: [RetouchTests, RetouchUITests]

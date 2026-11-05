@@ -1,4 +1,3 @@
-import CoreImage
 import Observation
 import UIKit
 
@@ -6,44 +5,29 @@ import UIKit
 @Observable
 final class AutoLightDetector {
     private(set) var cameraState: CameraState = .idle
-    private(set) var lightCondition: LightCondition?
-    private(set) var roomLux: Double?
-    private(set) var measuredLux: Double?
-    private(set) var roomKelvin: Double?
-    private(set) var dimLightLevel: Double = 0
-    private(set) var isLowLight = false
-    private(set) var isFaceVisible = false
     private(set) var appliedBrightness: Double = 0
     private(set) var manualBrightness: Double?
-    private(set) var manualColor: ManualColorChoice?
     private(set) var filterColor: ManualColorChoice?
-    private(set) var edgeLightLevel: Double = 0   // 0...1 ketebalan border
+    private(set) var ringLightLevel: Double = 0
 
-    var targetColorKelvin: Double { (manualColor ?? .natural).appearanceKelvin }
+    @ObservationIgnored let config = LightingConfig()
+    @ObservationIgnored let pipeline: FramePipeline
+    @ObservationIgnored var renderer: MirrorRenderer { pipeline.renderer }
+    @ObservationIgnored var frameForwarder: FrameForwarder { pipeline.vision }
 
-    @ObservationIgnored var appleWhiteBalanceBelowLux = 30.0
-    @ObservationIgnored var warmUpTime: TimeInterval = 0.7
-
-    @ObservationIgnored let renderer: MirrorRenderer
-    @ObservationIgnored let frameForwarder = FrameForwarder()
     @ObservationIgnored private let camera = CameraSessionManager()
-    @ObservationIgnored private let faceTracker = FaceTracker()
     @ObservationIgnored private let brightness = BrightnessController()
-    @ObservationIgnored private var meter = LightMeter()
-    @ObservationIgnored private var classifier = LightConditionClassifier()
-    @ObservationIgnored private var compensation = DimLightCompensation()
-    @ObservationIgnored private var colorTracker = ColorTemperatureTracker()
-    @ObservationIgnored private var usesAppleWhiteBalance = false
-    @ObservationIgnored private var manualColorBase: WhiteBalance?
-    @ObservationIgnored private var lastRoomBalance: WhiteBalance?
+    @ObservationIgnored private let engine: LightingEngine
+    @ObservationIgnored private var autoRingLight = 0.0
+    @ObservationIgnored private var brightnessCap = 1.0
     @ObservationIgnored private var isStarted = false
     @ObservationIgnored private var isAppActive = UIApplication.shared.applicationState == .active
-    @ObservationIgnored private var runningSince = Date.distantPast
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
 
     init() {
-        renderer = MirrorRenderer(faceTracker: faceTracker)
-        compensation.thresholdLux = classifier.thresholds.darkBelow
+        camera.prefersAutoFrameRate = config.autoFrameRateInDark
+        engine = LightingEngine(camera: camera, config: config)
+        pipeline = FramePipeline(lighting: engine)
         appliedBrightness = Self.roundedPercent(brightness.current)
 
         brightness.onChange = { [weak self] value in
@@ -52,11 +36,8 @@ final class AutoLightDetector {
             if rounded != appliedBrightness { appliedBrightness = rounded }
         }
         camera.onStateChange = { [weak self] in self?.cameraStateChanged($0) }
-        camera.onLightSample = { [weak self] in self?.ingest($0) }
-        camera.onFrame = { [renderer, frameForwarder] in
-            renderer.render($0)
-            frameForwarder.send($0)
-        }
+        camera.onFrame = { [pipeline] frame in pipeline.process(frame) }
+        engine.onOutput = { [weak self] in self?.engineDidUpdate($0) }
 
         let center = NotificationCenter.default
         observers = [
@@ -106,33 +87,23 @@ final class AutoLightDetector {
         applyBrightness()
     }
 
-    func setManualColor(_ choice: ManualColorChoice) {
-        manualColor = choice
-        if manualColorBase == nil { manualColorBase = lastRoomBalance }
-        applyManualColor()
-    }
-
     func setFilterColor(_ choice: ManualColorChoice) {
         filterColor = choice
-        renderer.flashColor = Self.edgeLightColor(for: choice)
     }
 
     func resetToAuto() {
         manualBrightness = nil
-        manualColor = nil
         filterColor = nil
-        renderer.flashColor = Self.edgeLightColor(for: .natural)
-        manualColorBase = nil
         applyBrightness()
-        restartColorAdaptation()
     }
+
+    // MARK: - Lifecycle
 
     private func resignActive() {
         isAppActive = false
         guard isStarted else { return }
         brightness.restoreBaseline()
-//        renderer.targetLevel = 0
-        edgeLightLevel = 0
+        ringLightLevel = 0
     }
 
     private func becomeActive() {
@@ -166,119 +137,49 @@ final class AutoLightDetector {
     }
 
     private func pauseAdjustments() {
-        meter.reset()
-        classifier.reset()
-        compensation.reset()
-        faceTracker.reset()
-        lightCondition = nil
-        roomLux = nil
-        measuredLux = nil
-        isFaceVisible = false
-        dimLightLevel = 0
-        isLowLight = false
-//        renderer.targetLevel = 0
-        edgeLightLevel = 0
-        renderer.enhancementOn = false
+        engine.reset()
+        autoRingLight = 0
+        ringLightLevel = 0
     }
 
     private func resumeFromScratch() {
         pauseAdjustments()
-        runningSince = .now
-        usesAppleWhiteBalance = false
         applyBrightness()
-        if manualColor != nil, manualColorBase != nil {
-            applyManualColor()
-        } else {
-            restartColorAdaptation()
-        }
     }
 
-    private func ingest(_ sample: LightSample) {
-        guard cameraState == .running, Date.now.timeIntervalSince(runningSince) >= warmUpTime else { return }
-        let faceVisible = faceTracker.isFaceVisible
-        if faceVisible != isFaceVisible { isFaceVisible = faceVisible }
+    // MARK: - Lighting
 
-        guard let lux = meter.ingest(sample) else { return }
-        let room = compensation.roomLux(from: lux)
-        measuredLux = lux
-        roomLux = room
-        classifier.ingest(room)
-        if classifier.condition != lightCondition { lightCondition = classifier.condition }
-
-        if compensation.update(lux: lux, isDark: classifier.condition == .dark) {
-            dimLightLevel = compensation.level
-        }
-        if compensation.isOn != isLowLight {
-            isLowLight = compensation.isOn
-            renderer.enhancementOn = isLowLight   // Enhanced menyala hanya saat low light
-            applyBrightness()
-        }
-        updateColor(sample, roomLux: room)
+    private func engineDidUpdate(_ output: LightingOutput) {
+        guard isStarted, cameraState == .running else { return }
+        autoRingLight = output.ringLight
+        brightnessCap = output.screenBrightnessCap
+        if manualBrightness == nil { applyAutoLight() }
     }
 
     private func applyBrightness() {
         guard isAppActive else { return }
         if let manualBrightness {
             brightness.set(manualBrightness)
-            // Border thickness follows the slider above the user's own brightness:
-            // none at their level, thickest at full (same as auto in low light).
             let baseline = Double(brightness.baseline)
-//            renderer.targetLevel = baseline >= 0.98
-//                ? (manualBrightness >= 0.98 ? 1 : 0)
-//                : min(max((manualBrightness - baseline) / (1 - baseline), 0), 1)
-            edgeLightLevel = baseline >= 0.98
+            let level = baseline >= 0.98
                 ? (manualBrightness >= 0.98 ? 1 : 0)
                 : min(max((manualBrightness - baseline) / (1 - baseline), 0), 1)
+            ringLightLevel = level
+            engine.manualPanel = level
         } else {
-            brightness.ramp(to: isLowLight ? 1 : brightness.baseline)
-//            renderer.targetLevel = isLowLight ? 1 : 0
-            edgeLightLevel = isLowLight ? 1 : 0
+            engine.manualPanel = nil
+            applyAutoLight()
         }
     }
 
-    private func updateColor(_ sample: LightSample, roomLux: Double) {
-        if manualColor != nil {
-            if manualColorBase == nil, let current = sample.current {
-                manualColorBase = current
-                applyManualColor()
-            }
-            return
-        }
-
-        let veryDark = roomLux < appleWhiteBalanceBelowLux * (usesAppleWhiteBalance ? 2 : 1)
-        if veryDark != usesAppleWhiteBalance {
-            usesAppleWhiteBalance = veryDark
-            restartColorAdaptation()
-        }
-
-        if usesAppleWhiteBalance {
-            lastRoomBalance = sample.current
-        } else {
-            if let room = colorTracker.update(current: sample.current, grayWorld: sample.grayWorld,
-                                              isFaceVisible: isFaceVisible) {
-                camera.glideWhiteBalance(to: room.rendered(asIfLitBy: targetColorKelvin))
-            }
-            lastRoomBalance = colorTracker.roomBalance ?? sample.current
-        }
-        roomKelvin = lastRoomBalance?.temperature
-    }
-
-    private func applyManualColor() {
-        guard let manualColorBase else { return }
-        camera.glideWhiteBalance(to: manualColorBase.rendered(asIfLitBy: targetColorKelvin))
-    }
-
-    private func restartColorAdaptation() {
-        colorTracker.reset()
-        camera.useAutoWhiteBalance()
-    }
-
-    private static func edgeLightColor(for choice: ManualColorChoice) -> CIColor {
-        switch choice {
-        case .natural: CIColor(red: 1, green: 1, blue: 1)
-        case .warm: CIColor(red: 1, green: 0.925, blue: 0.733)
-        case .cool: CIColor(red: 0.843, green: 0.973, blue: 1)
-        }
+    private func applyAutoLight() {
+        guard isAppActive else { return }
+        if ringLightLevel != autoRingLight { ringLightLevel = autoRingLight }
+        let baseline = Double(brightness.baseline)
+        let pre = Double(max(config.panelPreRampFraction, 0.01))
+        let t = min(max(autoRingLight / pre, 0), 1)
+        let target = baseline + (1 - baseline) * t * t * (3 - 2 * t)
+        brightness.ramp(to: CGFloat(min(target, max(baseline, brightnessCap))))
     }
 
     private static func roundedPercent(_ value: CGFloat) -> Double {

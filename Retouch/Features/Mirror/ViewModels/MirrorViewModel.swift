@@ -4,7 +4,6 @@ import Observation
 @MainActor
 @Observable
 final class MirrorViewModel {
-    // Kamera dimiliki AutoLightDetector, karena dua AVCaptureSession tidak bisa jalan bareng
     let detector: AutoLightDetector
     let lighting: LightingViewModel
     let stabilizer = MotionStabilizer()
@@ -16,21 +15,14 @@ final class MirrorViewModel {
     private(set) var zoomState = ZoomState()
     var isLightingSheetPresented = false
 
-    /// Bar zoom manual muncul saat gesture dimatikan
     var isZoomBarVisible: Bool { !isGestureEnabled }
 
-    /// Dipetakan dari cameraState detector, supaya MirrorView tetap pakai `permission`
     var permission: CameraPermissionStatus {
         detector.cameraState == .permissionDenied ? .denied : .granted
     }
 
     var cameraState: CameraState { detector.cameraState }
     func retryCamera() { detector.retryCameraSetup() }
-
-    /// Lux ruangan (cahaya layar sudah dikeluarkan), untuk label di pojok kanan atas
-    var luxText: String {
-        detector.roomLux.map { "\(Int($0.rounded())) lux" } ?? "– lux"
-    }
 
     init(zoomGesture: ZoomGestureServicing = ZoomGestureService()) {
         let detector = AutoLightDetector()
@@ -54,7 +46,6 @@ final class MirrorViewModel {
         }
     }
 
-    // MARK: - Kamera
     func start() async {
         detector.start()
         zoomGesture.start()
@@ -62,14 +53,12 @@ final class MirrorViewModel {
     }
 
     func stop() {
-        // Setiap app keluar atau ditutup, pengaturan manual dibuang: buka lagi mulai dari auto
         lighting.setAuto(true)
         detector.stop()
         zoomGesture.stop()
         stabilizer.stop()
     }
 
-    /// Dipanggil saat app aktif lagi, misalnya setelah dari Settings
     func refresh() {
         detector.start()
         zoomGesture.start()
@@ -113,6 +102,5 @@ final class MirrorViewModel {
     func resetZoomLearning() { zoomGesture.resetLearning() }
     func clearZoomLog() { zoomGesture.clearZoomLog() }
 
-    // MARK: - Lighting
     func showLighting() { isLightingSheetPresented = true }
 }
