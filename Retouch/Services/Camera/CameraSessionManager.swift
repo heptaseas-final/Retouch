@@ -28,8 +28,6 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
     var onStateChange: ((CameraState) -> Void)?
     var frameRate: Int32 = 60
     var prefersAutoFrameRate = false
-    /// Lebar frame yang dicari (4K). Frame lebih besar dari layar lalu dikecilkan oleh renderer:
-    /// lebih tajam dan noise sensor ikut dirata-rata, tanpa delay.
     var preferredWidth: Int32 = 3840
     var maxRestartAttempts = 3
     var preferredStabilization: AVCaptureVideoStabilizationMode = .off
@@ -103,17 +101,34 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
             isConfigured = true
         }
         if !session.isRunning { session.startRunning() }
-        updateStabilizationState()
         report(session.isRunning ? .running : .failed)
     }
 
+    private func configureColorAndExposure(_ device: AVCaptureDevice){
+        withLock(device) { device in
+            if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                device.whiteBalanceMode = .continuousAutoWhiteBalance
+            }
+            
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+            }
+        }
+    }
+    
     private func configure() -> Bool {
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front),
               let input = try? AVCaptureDeviceInput(device: device) else { return false }
 
         session.beginConfiguration()
         defer { session.commitConfiguration() }
-        session.sessionPreset = .high
+        
+        if session.canSetSessionPreset(.inputPriority) {
+            session.sessionPreset = .inputPriority
+        } else {
+            session.sessionPreset = .high
+        }
+        session.automaticallyConfiguresCaptureDeviceForWideColor = false
 
         guard session.canAddInput(input) else { return false }
         session.addInput(input)
@@ -128,7 +143,13 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
 
         lockFrameRate(device)
         configureFocus(device)
+        configureColorAndExposure(device)
+        
         self.device = device
+        
+        setAutoExposure()
+        setAutoWhiteBalance()
+        
         return true
     }
 
@@ -138,12 +159,20 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
             if d.isAutoFocusRangeRestrictionSupported { d.autoFocusRangeRestriction = .none }
             if d.isSmoothAutoFocusSupported { d.isSmoothAutoFocusEnabled = false }
             if d.isFocusPointOfInterestSupported { d.focusPointOfInterest = CGPoint(x: 0.5, y: 0.5) }
+            d.automaticallyAdjustsFaceDrivenAutoFocusEnabled = false
+            d.isFaceDrivenAutoFocusEnabled = true
+            d.automaticallyAdjustsFaceDrivenAutoExposureEnabled = false
+            d.isFaceDrivenAutoExposureEnabled = true
         }
-        #if DEBUG
-        print("[Camera] focus autofocus=\(device.isFocusModeSupported(.continuousAutoFocus)) "
-              + "minimumFocusDistance=\(device.minimumFocusDistance)mm "
-              + "nearRange=\(device.isAutoFocusRangeRestrictionSupported)")
-        #endif
+        enableVideoHDR(device)
+    }
+
+    private func enableVideoHDR(_ device: AVCaptureDevice) {
+        guard device.activeFormat.isVideoHDRSupported else { return }
+        withLock(device) { d in
+            d.automaticallyAdjustsVideoHDREnabled = false
+            d.isVideoHDREnabled = true
+        }
     }
 
     private func enableStabilization(_ connection: AVCaptureConnection?, _ device: AVCaptureDevice) {
@@ -151,13 +180,6 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
         guard let connection, connection.isVideoStabilizationSupported,
               device.activeFormat.isVideoStabilizationModeSupported(preferredStabilization) else { return }
         connection.preferredVideoStabilizationMode = preferredStabilization
-    }
-
-    private func updateStabilizationState() {
-        #if DEBUG
-        let active = videoConnection?.activeVideoStabilizationMode ?? .off
-        print("[Camera] stabilization preferred=\(Self.name(preferredStabilization)) active=\(Self.name(active))")
-        #endif
     }
 
     private static func name(_ mode: AVCaptureVideoStabilizationMode) -> String {
@@ -175,40 +197,137 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
     }
 
     private func lockFrameRate(_ device: AVCaptureDevice) {
-        var best: (format: AVCaptureDevice.Format, fps: Double, widthGap: Int32, auto: Bool)?
+        let targetFPS = min(max(Double(frameRate), 30), 60)
+        let minimumFPS = 29.0
+
+        var best: (
+            format: AVCaptureDevice.Format,
+            fps: Double,
+            pixelCount: Int64,
+            isBinned: Bool,
+            hdr: Bool,
+            p3: Bool,
+            auto: Bool
+        )?
+
         for format in device.formats {
-            let width = CMVideoFormatDescriptionGetDimensions(format.formatDescription).width
-            guard width >= 1280, width <= preferredWidth else { continue }
-            let maxFps = format.videoSupportedFrameRateRanges.map(\.maxFrameRate).max() ?? 0
-            let fps = min(maxFps, Double(frameRate))
-            let gap = preferredWidth - width
+            let dimensions = CMVideoFormatDescriptionGetDimensions(
+                format.formatDescription
+            )
+
+            let width = dimensions.width
+            let height = dimensions.height
+
+            guard width >= 1280,
+                  width <= preferredWidth else {
+                continue
+            }
+
+            let supportedFPS = format.videoSupportedFrameRateRanges
+                .compactMap { range -> Double? in
+                    let fps = min(range.maxFrameRate, targetFPS)
+
+                    guard fps >= minimumFPS,
+                          fps >= range.minFrameRate else {
+                        return nil
+                    }
+
+                    return fps
+                }
+                .max()
+
+            guard let fps = supportedFPS else {
+                continue
+            }
+
+            let pixelCount = Int64(width) * Int64(height)
             let auto = prefersAutoFrameRate && format.isAutoVideoFrameRateSupported
+
+            let candidate = (
+                format: format,
+                fps: fps,
+                pixelCount: pixelCount,
+                isBinned: format.isVideoBinned,
+                hdr: format.isVideoHDRSupported,
+                p3: format.supportedColorSpaces.contains(.P3_D65),
+                auto: auto
+            )
+
             let better: Bool
-            if let best {
-                if fps != best.fps { better = fps > best.fps }
-                else if gap != best.widthGap { better = gap < best.widthGap }
-                else if auto != best.auto { better = auto }
-                else { better = !format.isVideoBinned && best.format.isVideoBinned }
+
+            if let current = best {
+                if candidate.pixelCount != current.pixelCount {
+                    better = candidate.pixelCount > current.pixelCount
+                }
+                else if candidate.fps != current.fps {
+                    better = candidate.fps > current.fps
+                }
+                else if candidate.hdr != current.hdr {
+                    better = candidate.hdr
+                }
+                else if candidate.p3 != current.p3 {
+                    better = candidate.p3
+                }
+                else if candidate.isBinned != current.isBinned {
+                    better = !candidate.isBinned
+                }
+                else {
+                    better = candidate.auto && !current.auto
+                }
             } else {
                 better = true
             }
-            if better { best = (format, fps, gap, auto) }
-        }
-        guard let best else { return }
-        let duration = CMTime(value: 1, timescale: Int32(best.fps))
-        withLock(device) {
-            $0.activeFormat = best.format
-            if best.auto {
-                $0.isAutoVideoFrameRateEnabled = true
-            } else {
-                $0.activeVideoMinFrameDuration = duration
-                $0.activeVideoMaxFrameDuration = duration
+
+            if better {
+                best = candidate
             }
         }
+
+        guard let best else {
+            #if DEBUG
+            print("[Camera] No format supports the requested 30–60 FPS range.")
+            #endif
+            return
+        }
+
+        let duration = CMTime(
+            seconds: 1.0 / best.fps,
+            preferredTimescale: 60_000
+        )
+
+        withLock(device) { camera in
+            camera.activeFormat = best.format
+            camera.activeColorSpace = best.p3 ? .P3_D65 : .sRGB
+
+            if best.auto {
+                camera.isAutoVideoFrameRateEnabled = true
+            } else {
+                camera.isAutoVideoFrameRateEnabled = false
+                camera.activeVideoMinFrameDuration = duration
+                camera.activeVideoMaxFrameDuration = duration
+            }
+        }
+
         #if DEBUG
-        let dims = CMVideoFormatDescriptionGetDimensions(best.format.formatDescription)
-        print("[Camera] format \(dims.width)x\(dims.height) fps=\(best.fps) autoFrameRate=\(best.auto) "
-              + "binned=\(best.format.isVideoBinned)")
+        let actualDimensions = CMVideoFormatDescriptionGetDimensions(
+            device.activeFormat.formatDescription
+        )
+
+        let actualDuration = device.activeVideoMaxFrameDuration
+        let actualFPS = actualDuration.seconds > 0
+            ? 1.0 / actualDuration.seconds
+            : 0
+
+        print("""
+        [Camera] Selected format:
+          Resolution: \(actualDimensions.width)x\(actualDimensions.height)
+          Target FPS: \(best.fps)
+          Active FPS limit: \(String(format: "%.2f", actualFPS))
+          Binned: \(device.activeFormat.isVideoBinned)
+          Auto FPS: \(best.auto)
+          Video HDR supported: \(best.hdr)
+          Color space: \(device.activeColorSpace == .P3_D65 ? "P3" : "sRGB")
+        """)
         #endif
     }
 
