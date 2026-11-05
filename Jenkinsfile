@@ -27,7 +27,9 @@ pipeline {
         stage('Unit Test') {
             steps {
                 sh '''
+                    xcodegen generate
                     xcrun simctl shutdown all || true
+                    rm -rf build/Retouch.xcresult
                     set -o pipefail && xcodebuild test \
                         -project "$PROJECT" \
                         -scheme "$SCHEME" \
