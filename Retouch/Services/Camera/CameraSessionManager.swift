@@ -1,10 +1,3 @@
-//
-//  CameraSessionManager.swift
-//  Retouch
-//
-//  Created by Davin P on 26/10/26.
-//
-
 import AVFoundation
 
 struct LightSample {
@@ -32,6 +25,7 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
     private var device: AVCaptureDevice?
     private var videoConnection: AVCaptureConnection?
     private var lastSampleTime: CFTimeInterval = 0
+    private var activeFOV: Double = 0
 
     private var isConfigured = false
     private var wantsRunning = false
@@ -124,6 +118,7 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
         enableStabilization(output.connection(with: .video), device)
 
         lockFrameRate(device)
+        activeFOV = Double(device.activeFormat.videoFieldOfView)
         self.device = device
         return true
     }
@@ -292,7 +287,13 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
                        from connection: AVCaptureConnection) {
         guard let device else { return }
         stepWhiteBalanceGlide(device)
-        if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) { onFrame?(pixelBuffer) }
+        if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+            FrameClock.shared.note(frameTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds,
+                                   bufferWidth: Double(CVPixelBufferGetWidth(pixelBuffer)),
+                                   bufferHeight: Double(CVPixelBufferGetHeight(pixelBuffer)),
+                                   hFOVDegrees: activeFOV)
+            onFrame?(pixelBuffer)
+        }
 
         let now = CACurrentMediaTime()
         guard now - lastSampleTime >= sampleInterval else { return }

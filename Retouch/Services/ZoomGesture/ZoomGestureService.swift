@@ -54,6 +54,7 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
     private var eyeFlow = EyeZoomFlow()
     private var eyeActivity = EyeActivityRecognizer()
     private var eyeInput = EyeZoomFlow.Input()
+    private var distComp = DistanceCompensator()
 
     // Pinch
     private var pinchScale: CGFloat = 1
@@ -133,6 +134,7 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         eyeFlow = EyeZoomFlow()
         eyeActivity = EyeActivityRecognizer()
         eyeInput = EyeZoomFlow.Input()
+        distComp = DistanceCompensator()
     }
 
     /// Anggap semua hasil deteksi yang ada sekarang sudah dibaca, supaya hasil lama tidak diproses ulang.
@@ -398,8 +400,11 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
             }
             let freeze = ZoomTuning.pitchEnabled && ZoomTuning.pitchYawFreezeEnabled
                 && pitchRecognizer.isFrozen(now: faceSnap.timestamp)
-            headTarget = headPose.update(face: faceForHead, learn: learn && !freeze, covered: covering,
-                                         yawFrozen: freeze, now: faceSnap.timestamp)
+            headTarget = headPose.update(face: faceForHead, learn: learn && !freeze, covered: covering,yawFrozen: freeze, now: faceSnap.timestamp)
+            distComp.update(span: Double(points.scale / viewSize.width),
+                            yawDegrees: Double(faceForHead?.yaw ?? .nan),
+                            valid: !covering && !freeze,
+                            now: faceSnap.timestamp.timeIntervalSinceReferenceDate)
             lipMotion.update(face: faceForHead, ignore: freeze, now: faceSnap.timestamp)
             eyeActivity.update(face: faceForHead, learn: learn && !covering, ignore: freeze,
                                now: faceSnap.timestamp)
@@ -430,6 +435,7 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
 
         let target = resolver.resolve(hand: handTarget, lips: lipFlow.isActive, head: headTarget,
                                       covering: covering, headStraight: headPose.isStraight, now: now)
+        if target == .fullFace { distComp.clearReference() } else { distComp.latchReferenceIfNeeded() }
         // Catat kapan auto zoom (mata/bibir) mulai dan selesai, bahan untuk membaca koreksi manual
         let handDriven = target == .leftEye || target == .rightEye || target == .lips
         if handDriven, autoZoomSince == nil { autoZoomSince = now }
@@ -576,8 +582,10 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
             send(scale: 1, focus: .center)
             return
         }
-        // Besar zoom selalu sama untuk satu target; transisi dihaluskan ZoomAnimator
-        send(scale: target.zoomScale, focus: .target(target, focus))
+        let factor = (isGestureEnabled && target != .fullFace) ? distComp.factor : 1
+        send(scale: min(target.zoomScale * factor, ZoomTuning.distMaxScale), focus: .target(target, focus))
+        let finalScale = max(1, min(target.zoomScale * factor, ZoomTuning.distMaxScale))
+        send(scale: finalScale, focus: .target(target, focus))
     }
 
     private func focusPoint(for target: ZoomTarget, _ p: FacePoints) -> CGPoint? {

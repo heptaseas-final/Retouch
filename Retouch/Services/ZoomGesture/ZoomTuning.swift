@@ -25,7 +25,7 @@ nonisolated struct ZoomTuning {
     static let scaleTau: CGFloat = 0.65
     static let handSpeedTau: CGFloat = 0.15
     // MARK: - Zoom samping (level tetap)
-    static let sideZoom: CGFloat = 1.35
+    static let sideZoom: CGFloat = 1.7
     static let sideEnterDwell: TimeInterval = 0.45
     static let sideExitDwell: TimeInterval = 0.9
     static let sideFocusStrength: CGFloat = 0.7
@@ -98,20 +98,20 @@ nonisolated struct ZoomTuning {
     static let nominalStep: TimeInterval = 1.0 / 12.0
     
     // MARK: - Zoom bibir satu alur
-    static let lipsEnterDwell: TimeInterval = 0.5     // pose 2 jari / 3 jari, timer sendiri-sendiri
-    static let lipsReleaseDwell: TimeInterval = 2.0   // dipakai di tahap 3
-    static let lipsPose2Max: CGFloat = 0.4            // jarak jempol-telunjuk / ukuran telapak
-    static let lipsHoldRadius = handEnterDistance * 1.5  // lebar wajah, jari di dalam ini = penahan (dipakai di tahap 4)
-    static let lipMotionBaselineTau = 0.8    // detik, rata-rata lambat bentuk bibir
-    static let lipMotionDevTau = 0.15        // detik, penghalus simpangan
-    static let lipMotionEnter = 0.05         // satuan jarak antar mata: di atas ini = bibir bergerak
-    static let lipMotionExit = 0.025         // di bawah ini = bibir diam (histeresis)
-    static let lipMotionLostGrace: TimeInterval = 0.5   // wajah tidak terbaca sesingkat ini: status ditahan
+    static let lipsEnterDwell: TimeInterval = 0.5
+    static let lipsReleaseDwell: TimeInterval = 2.0
+    static let lipsPose2Max: CGFloat = 0.4
+    static let lipsHoldRadius = handEnterDistance * 1.5
+    static let lipMotionBaselineTau = 0.8
+    static let lipMotionDevTau = 0.15
+    static let lipMotionEnter = 0.05
+    static let lipMotionExit = 0.025
+    static let lipMotionLostGrace: TimeInterval = 0.5
     
     // MARK: - Zoom mata satu alur (semua jarak dalam satuan d = jarak antar mata, FacePoints.scale)
     static let eyeZoneTrigger: CGFloat = 0.44     // radius trigger per mata
     static let eyeZoneHold: CGFloat = 0.78        // radius tahan maksimum per mata
-    static let eyeZoneDead: CGFloat = 0.09        // setengah lebar zona mati di garis tengah
+    static let eyeZoneDead: CGFloat = 0.09
     static let eyeFlowEnterDwell: TimeInterval = 0.5
     static let eyeFlowSwitchDwell: TimeInterval = 0.15
     static let eyeFlowReleaseDwell: TimeInterval = 1.7
@@ -124,8 +124,42 @@ nonisolated struct ZoomTuning {
     static let eyeBaselineTau = 6.0             // detik, belajar baseline per mata
     static let eyeActivityMaxYaw = 25.0
     static let eyeLearnMaxYaw = 15.0
-    static let eyeUnknownCap: TimeInterval = 3.0 
+    static let eyeUnknownCap: TimeInterval = 3.0
+    
+    // MARK: - Stabilizer tampilan zoom (hanya cara tampilan bergerak, bukan pemicu)
+    static let focusDeadZone: CGFloat = 0.10
+    static let panSmoothTime: CGFloat = 0.22
+    static let focusTransitionMax: TimeInterval = 1.5
+    static let focusMinCutoff: Double = 0.5
+    static let focusBeta: Double = 0.02
+
+    // MARK: - Kunci ukuran saat zoom ditahan (mata, bibir, samping)
+    static let distGamma: Double = 1.0
+    static let distMinFactor: Double = 0.1
+    static let distMaxFactor: Double = 10.0
+    static let distMaxScale: CGFloat = 30.0
+    static let distMaxYaw: Double = 40.0
+    static let distDeadBand: Double = 0.02
+    static let distFilterMinCutoff: Double = 0.7
+    static let distFilterBeta: Double = 3.0
+    static let distBaselineSpan: Double = 0.4
+    
+    // MARK: - Peredam guncangan (gyroscope), hanya di lapisan tampilan
+    static let stabEnabled: Bool = true
+    static let stabSampleRate: Double = 100.0
+    static let stabHighPassTau: Double = 0.3
+    static let stabDelay: Double = 0.08
+    static let stabVisibleFOVDegrees: Double = 40.0
+    static let stabGain: Double = 1.0
+    static let stabInvertX: Bool = false
+    static let stabInvertY: Bool = false
+    static let stabMarginUse: Double = 0.9
+    static let stabLowPassTau: Double = 0.012
+    static let stabEnableX: Bool = true
+    static let stabEnableY: Bool = true
+    static let stabFrameBias: Double = 0.0 
 }
+
 
 /// Hasil deteksi lengkap dengan cap waktu dan nomor urut yang bertambah.
 nonisolated struct DetectionSnapshot<Value> {

@@ -9,8 +9,8 @@ nonisolated enum ZoomTarget: Equatable {
     var zoomScale: CGFloat {
         switch self {
         case .fullFace: 1.1
-        case .leftEye, .rightEye: 2.3
-        case .lips: 2.0
+        case .leftEye, .rightEye: 2.5
+        case .lips: 2.3
         case .faceSide: ZoomTuning.sideZoom   // satu besar tetap, diatur di ZoomTuning
         }
     }

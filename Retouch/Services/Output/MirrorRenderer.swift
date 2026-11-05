@@ -28,6 +28,11 @@ final class MirrorRenderer {
         get { lock.withLock { _enhancementOn } }
         set { lock.withLock { _enhancementOn = newValue } }
     }
+    /// Tambahan (peredam gyro): geseran dalam piksel drawable untuk frame yang sedang digambar. Nil = tidak aktif.
+    var frameShift: FrameShiftProvider? {
+        get { lock.withLock { () -> FrameShiftProvider? in _frameShift } }
+        set { lock.withLock { _frameShift = newValue } }
+    }
 
     /// Opacity of the border at its outer edge.
     var maxFlashAlpha = 1.0
@@ -50,6 +55,7 @@ final class MirrorRenderer {
     private var _targetLevel = 0.0
     private var _flashColor = CIColor(red: 1, green: 1, blue: 1)
     private var _enhancementOn = false
+    private var _frameShift: FrameShiftProvider?
     private var layer: CAMetalLayer?
     private var drawableSize: CGSize = .zero
     
@@ -58,6 +64,8 @@ final class MirrorRenderer {
     private var gradeCache: [ColorGrade: Data] = [:]
     private var smoothedFace: CGRect?     // ter-normalisasi (0...1) pada frame upright
     private var faceWeight = 0.0
+    
+    typealias FrameShiftProvider = @Sendable (CGFloat) -> CGSize
 
     init(faceTracker: FaceTracker) {
         self.faceTracker = faceTracker
@@ -91,6 +99,14 @@ final class MirrorRenderer {
               let commandBuffer = queue.makeCommandBuffer() else { return }
 
         var image = process(frame, size: size, enhanced: enhanced)
+        if let provider = frameShift {
+            let shift = provider(size.width)
+            if shift.width != 0 || shift.height != 0 {
+                let moved = image.transformed(by: CGAffineTransform(translationX: shift.width, y: -shift.height))
+                let clamped = moved.clampedToExtent()
+                image = clamped.cropped(to: CGRect(origin: .zero, size: size))
+            }
+        }
 
         let flashTarget = target
         flash += (flashTarget - flash) * (flashTarget > flash ? flashOnEasing : flashOffEasing)
