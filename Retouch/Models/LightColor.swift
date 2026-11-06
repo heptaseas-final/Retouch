@@ -29,3 +29,31 @@ enum LightColor: CaseIterable, Identifiable {
         }
     }
 }
+
+enum LightMode: Hashable, CaseIterable {
+    case off
+    case on(LightColor)
+
+    static var allCases: [LightMode] {
+        [.off] + LightColor.allCases.map { .on($0) }
+    }
+
+    var next: LightMode {
+        let all = Self.allCases
+        let index = all.firstIndex(of: self) ?? 0
+        return all[(index + 1) % all.count]
+    }
+
+    var lightColor: LightColor? {
+        switch self {
+        case .off: return nil
+        case .on(let color): return color
+        }
+    }
+
+    var isOn: Bool { lightColor != nil }
+
+    var label: String {
+        lightColor?.label ?? "Light off"
+    }
+}

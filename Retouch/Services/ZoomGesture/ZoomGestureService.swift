@@ -6,22 +6,21 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         set { animator.onChange = newValue }
     }
     var onDebugInfo: (@Sendable (ZoomDebugInfo) -> Void)?
+    var onTracking: (@Sendable (ZoomTracking) -> Void)?
 
     private let animator = ZoomAnimator()
     private let faceDetector = FaceLandmarkDetector()
     private let handDetector = HandPointDetector()
     private let stateQueue = DispatchQueue(label: "zoom.state")
 
-    // Nomor urut deteksi yang sudah diteruskan ke stateQueue (diakses di queue kamera, dijaga seqLock)
     private let seqLock = NSLock()
     private var queuedFaceSeq = 0
     private var queuedHandSeq = 0
 
-    // State: hanya diakses di stateQueue
     private var headPose: HeadPoseRecognizer
     private var turnAnchor: Double
     private var pitchRecognizer: HeadPitchRecognizer
-//    private var handProximity: HandProximityRecognizer
+
     private var resolver: ZoomGestureResolver
     private var faceTracker = FacePointTracker()
     private var pacer = DetectionPacer()
@@ -29,14 +28,11 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
     private var isGestureEnabled = true
     private var manualTarget: ZoomTarget = .fullFace
 
-    // Hasil terakhir tiap sumber: dipakai ulang saat sumber lain yang baru
     private var lastFace: FaceObservation?
     private var lastScan = HandScan()
     private var lastTips: [CGPoint] = []
     private var lastHand: CGPoint?
     
-    // Zoom bibir satu alur. lipsTracker hanya dipakai untuk trackHand (penghalus dan kecepatan tangan, pose 2 atau 3 jari)
-//    private var lipsTracker = HandProximityRecognizer()
     private var lipFlow = LipsZoomFlow()
     private var lipMotion = LipMotionRecognizer()
     private var lipsInput = LipsZoomFlow.Input()
@@ -56,7 +52,6 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
     private var eyeInput = EyeZoomFlow.Input()
     private var distComp = DistanceCompensator()
 
-    // Pinch
     private var pinchScale: CGFloat = 1
     private var pinchBase: CGFloat = 1
     private var pinchActive = false
@@ -65,7 +60,6 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
     private var pinchStartIdle = false
     private var pinchStartSide = false
 
-    // Belajar per pengguna
     private var handProfile: HandProfile
     private var savedProfile = HeadProfile()
     private var savedHandProfile = HandProfile()
@@ -79,7 +73,6 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
     private var lastSideZoomEnd = Date.distantPast
     private var lastCorrection = Date.distantPast
 
-    // Debug. `fps` = deteksi wajah per detik (bukan fps kamera), `handFps` = deteksi tangan per detik
     private var lastDebugSent = Date.distantPast
     private var fpsCount = 0
     private var fpsStart = Date()
@@ -87,10 +80,8 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
 
     init() {
         var profile = HandProfileStore.load()
-        profile.beginSession()   // nilai tersimpan jadi titik awal; belajar hanya boleh geser sedikit dari sini
+        profile.beginSession()
         handProfile = profile
-//        handProximity = HandProximityRecognizer(profile: profile)
-//        lipsTracker = HandProximityRecognizer(profile: profile)
         resolver = ZoomGestureResolver()
         let head = HeadPoseRecognizer(profile: HeadProfileStore.load())
         headPose = head
@@ -104,7 +95,7 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
     }
 
     private func makeHeadPose() -> HeadPoseRecognizer {
-        HeadPoseRecognizer(profile: headPose.profile, turnAnchor: turnAnchor)   // hasil belajar tetap
+        HeadPoseRecognizer(profile: headPose.profile, turnAnchor: turnAnchor)
     }
 
     private func makePitch() -> HeadPitchRecognizer {
@@ -117,7 +108,6 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         return bank
     }
 
-    /// Buang hasil deteksi lama yang tersimpan di service (bukan di detektor).
     private func clearCachedDetections() {
         lastFace = nil
         lastScan = HandScan()
@@ -137,7 +127,6 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         distComp = DistanceCompensator()
     }
 
-    /// Anggap semua hasil deteksi yang ada sekarang sudah dibaca, supaya hasil lama tidak diproses ulang.
     private func syncQueuedSequences() {
         let faceSeq = faceDetector.snapshot.sequence
         let handSeq = handDetector.snapshot.sequence
@@ -164,8 +153,6 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         stateQueue.async { [self] in viewSize = size }
     }
 
-    /// Sesi kamera baru (setelah terputus atau kembali dari background): buang semua state sesi.
-    /// Hasil belajar per pengguna tetap dipertahankan.
     func resetSession() {
         DispatchQueue.main.async { [animator] in animator.reset() }
         faceDetector.reset()
@@ -174,7 +161,6 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         stateQueue.async { [self] in
             headPose = makeHeadPose()
             pitchRecognizer = makePitch()
-//            handProximity = makeHandProximity()
             faceTracker = FacePointTracker()
             resolver = makeResolver()
             clearCachedDetections()
@@ -189,9 +175,6 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         }
     }
 
-    // MARK: - Frame (dipanggil di queue kamera)
-    /// Tampilan kamera tetap penuh. Di sini hanya diminta deteksi baru sesuai laju, dan logika keputusan
-    /// hanya dijalankan kalau ada hasil deteksi dengan nomor urut baru.
     func process(_ pixelBuffer: CVPixelBuffer) {
         let (isAuto, interval) = stateQueue.sync { (isGestureEnabled, pacer.interval(now: Date())) }
         faceDetector.submit(pixelBuffer, minInterval: interval)
@@ -218,18 +201,16 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         }
     }
 
-    // MARK: - Kontrol dari UI
     func setGestureEnabled(_ isEnabled: Bool) {
         syncQueuedSequences()
         stateQueue.async { [self] in
             isGestureEnabled = isEnabled
-            headPose = makeHeadPose()   // hasil belajar tetap
+            headPose = makeHeadPose()
             pitchRecognizer = makePitch()
-//            handProximity = makeHandProximity()
             resolver = makeResolver()
             clearCachedDetections()
             manualTarget = .fullFace
-            pinchScale = 1      // sisa zoom manual ikut dibersihkan
+            pinchScale = 1
             pinchBase = 1
             pinchActive = false
             autoZoomSince = nil
@@ -258,12 +239,11 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         stateQueue.async { [self] in
             if !pinchActive {
                 pinchActive = true
-                pinchBase = max(animator.displayedScale, 1)   // mulai dari zoom yang sedang tampil
+                pinchBase = max(animator.displayedScale, 1)
                 pinchStartScale = pinchBase
                 let now = Date()
                 pinchStartAuto = isGestureEnabled
                     && (autoZoomSince != nil || now.timeIntervalSince(lastAutoZoomEnd) < 3)
-                // Zoom samping yang baru muncul (atau baru selesai dan singkat) lalu di-pinch keluar = tidak diminta
                 let sideRecent = sideZoomSince.map { now.timeIntervalSince($0) <= ZoomTuning.sideCorrectionWindow } ?? false
                 let sideJustEnded = sideZoomSince == nil
                     && now.timeIntervalSince(lastSideZoomEnd) < ZoomTuning.sideCorrectionAfterEnd
@@ -286,8 +266,6 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         }
     }
 
-    /// Koreksi manual dipakai sebagai sinyal: zoom out setelah auto = tidak diminta,
-    /// zoom in saat auto diam = terlewat.
     private func learnFromPinch(finalScale: CGFloat) {
         guard isGestureEnabled, pinchStartScale > 0 else { return }
         let now = Date()
@@ -296,7 +274,6 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         let sideUnwanted = pinchStartSide && ratio < 0.85
         let missed = pinchStartIdle && ratio > 1.25
 
-        // Selalu dicatat di log; belajar dibatasi satu koreksi per 2 detik
         if handUnwanted || sideUnwanted { eventLog.notePinchOutAfterAuto() }
         if missed { eventLog.notePinchInWhileIdle() }
         guard handUnwanted || sideUnwanted || missed else { return }
@@ -331,15 +308,12 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         }
     }
 
-    // MARK: - Logic
-    /// Dipanggil hanya kalau ada deteksi baru. `faceSnap` / `handSnap` terisi hanya untuk sumber yang baru.
     private func update(faceSnap: DetectionSnapshot<FaceObservation?>?,
                         handSnap: DetectionSnapshot<HandScan>?,
                         handFps: Int, imageSize: CGSize) {
         guard viewSize.width > 0, viewSize.height > 0 else { return }
         let converter = CoordinateConverter(imageSize: imageSize, viewSize: viewSize)
 
-        // Waktu logika selalu maju, walau dua detektor selesai tidak berurutan
         let now = max(max(faceSnap?.timestamp ?? .distantPast, handSnap?.timestamp ?? .distantPast),
                       lastLogicTime)
         lastLogicTime = now
@@ -355,6 +329,7 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
             publish(manualTarget)
             sendDebug(target: manualTarget, tip: nil, grip: nil, points: points,
                       scan: HandScan(), face: lastFace, handFps: handFps, now: now)
+            onTracking?(ZoomTracking(target: manualTarget, face: points, viewSize: viewSize))
             return
         }
 
@@ -474,6 +449,7 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         }
         sendDebug(target: target, tip: lastHand, grip: grip, points: points,
                   scan: lastScan, face: lastFace, handFps: handFps, now: now)
+        onTracking?(ZoomTracking(target: target, face: points, viewSize: viewSize))
     }
 
     /// Catat gerakan kepala/tangan untuk mode hemat daya saat semuanya diam.
@@ -706,7 +682,7 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         lastDebugSent = now
         func dist(_ p: CGPoint?) -> CGFloat? {
             guard let tip, let p, points.width > 0 else { return nil }
-            return hypot(tip.x - p.x, tip.y - p.y) / points.width   // lebar wajah, sama dengan satuan recognizer
+            return hypot(tip.x - p.x, tip.y - p.y) / points.width   
         }
         let faceYaw = face.map { $0.yaw }.flatMap { $0.isFinite ? $0 : nil } ?? 0
         onDebugInfo(ZoomDebugInfo(

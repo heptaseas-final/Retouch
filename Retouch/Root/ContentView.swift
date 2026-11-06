@@ -9,33 +9,22 @@ import SwiftUI
 
 struct ContentView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    let session: MirrorSession
 
     var body: some View {
-        Group {
-            if hasCompletedOnboarding {
-                MainView()
-                    .transition(.opacity)
-            } else {
-                OnboardingView {
-                    withAnimation {
-                        hasCompletedOnboarding = true
-                    }
+        ZStack {
+            MirrorView(session: session, showsControls: hasCompletedOnboarding)
+
+            if !hasCompletedOnboarding {
+                OnboardingFlow(session: session) {
+                    withAnimation(.easeInOut) { hasCompletedOnboarding = true }
                 }
                 .transition(.opacity)
             }
         }
-        .animation(.easeInOut, value: hasCompletedOnboarding)
-    }
-    
-}
-
-
-struct MainView: View {
-    var body: some View {
-        MirrorView()
     }
 }
 
 #Preview {
-    ContentView()
+    ContentView(session: MirrorSession())
 }

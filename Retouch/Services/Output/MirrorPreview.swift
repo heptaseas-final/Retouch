@@ -18,6 +18,15 @@ struct MirrorPreview: UIViewRepresentable {
         override class var layerClass: AnyClass { CAMetalLayer.self }
         var renderer: MirrorRenderer?
 
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window == nil {
+                renderer?.detach(layer as! CAMetalLayer)
+            } else {
+                setNeedsLayout()
+            }
+        }
+
         override func layoutSubviews() {
             super.layoutSubviews()
             let scale = window?.screen.scale ?? traitCollection.displayScale

@@ -64,6 +64,15 @@ final class MirrorRenderer {
         }
     }
     
+    /// Lepas layer yang sudah keluar dari layar, supaya frame tidak dikirim ke layer yang tidak terlihat.
+    func detach(_ layer: CAMetalLayer) {
+        lock.withLock {
+            guard self.layer === layer else { return }
+            self.layer = nil
+            self.drawableSize = .zero
+        }
+    }
+
     func render(_ frame: CIImage, zoom: ZoomState, commandBuffer: MTLCommandBuffer) {
         let (layer, size, pointScale) = lock.withLock { (self.layer, drawableSize, self.pointScale) }
         guard let layer, let context, size.width > 0, size.height > 0 else {

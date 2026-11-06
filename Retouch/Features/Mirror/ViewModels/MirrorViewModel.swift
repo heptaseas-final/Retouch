@@ -4,18 +4,17 @@ import Observation
 @MainActor
 @Observable
 final class MirrorViewModel {
-    let detector: AutoLightDetector
-    let lighting: LightingViewModel
-    let stabilizer = MotionStabilizer()
-    private let zoomGesture: ZoomGestureServicing
+    let session: MirrorSession
+    var detector: AutoLightDetector { session.detector }
+    var lighting: LightingViewModel { session.lighting }
+    var stabilizer: MotionStabilizer { session.stabilizer }
+    private var zoomGesture: ZoomGestureServicing { session.zoomGesture }
 
-    private(set) var selectedPart: ZoomPart = .face
-    private(set) var debugInfo = ZoomDebugInfo()
-    private(set) var isGestureEnabled = true
-    private(set) var zoomState = ZoomState()
+    private(set) var selectedPart: FacePart = .face
+    private(set) var lightMode: LightMode = .off
+    var debugInfo: ZoomDebugInfo { session.debugInfo }
+    var zoomState: ZoomState { session.zoomState }
     var isLightingSheetPresented = false
-
-    var isZoomBarVisible: Bool { !isGestureEnabled }
 
     var permission: CameraPermissionStatus {
         detector.cameraState == .permissionDenied ? .denied : .granted
@@ -24,59 +23,24 @@ final class MirrorViewModel {
     var cameraState: CameraState { detector.cameraState }
     func retryCamera() { detector.retryCameraSetup() }
 
-    init(zoomGesture: ZoomGestureServicing = ZoomGestureService()) {
-        let detector = AutoLightDetector()
-        self.detector = detector
-        self.lighting = LightingViewModel(detector: detector)
-        detector.renderer.frameShift = { [stabilizer] (width: CGFloat) -> CGSize in
-            stabilizer.drawableShift(drawableWidth: width)
-        }
-        self.zoomGesture = zoomGesture
-        zoomGesture.onZoomChange = { [weak self] state in
-            guard let self else { return }
-            Task { @MainActor in self.zoomState = state }
-            self.stabilizer.setZoom(scale: state.scale, pan: state.offset)
-        }
-        zoomGesture.onDebugInfo = { [weak self] info in
-            guard let self else { return }
-            Task { @MainActor in self.debugInfo = info }
-        }
-        detector.frameForwarder.setHandler { [zoomGesture] buffer in
-            zoomGesture.process(buffer)
-        }
+    init(session: MirrorSession) {
+        self.session = session
     }
 
-    func start() async {
-        detector.start()
-        zoomGesture.start()
-        stabilizer.start()
-    }
-
-    func stop() {
-        lighting.setAuto(true)
-        detector.stop()
-        zoomGesture.stop()
-        stabilizer.stop()
-    }
-
-    func refresh() {
-        detector.start()
-        zoomGesture.start()
-        stabilizer.start()
-    }
+    func start() async { session.start() }
+    func stop() { session.stop() }
+    func refresh() { session.start() }
 
     func openSettings() { detector.openSystemSettings() }
 
-    // MARK: - Zoom
-    func toggleGesture() {
-        isGestureEnabled.toggle()
-        selectedPart = .face
-        zoomGesture.setGestureEnabled(isGestureEnabled)
+    func select(_ part: FacePart) {
+        selectedPart = part
+        session.select(part)
     }
 
-    func select(_ part: ZoomPart) {
-        selectedPart = part
-        zoomGesture.setManualTarget(part.target)
+    func setLightMode(_ mode: LightMode) {
+        lightMode = mode
+        session.setLightMode(mode)
     }
 
     func setViewSize(_ size: CGSize) {
@@ -96,7 +60,6 @@ final class MirrorViewModel {
         zoomGesture.setLearningPaused(isPresented)
     }
 
-    // MARK: - Alat uji auto zoom (debug overlay)
     func zoomLogSummary() -> ZoomLogSummary { zoomGesture.zoomLogSummary() }
     func zoomLogText() -> String { zoomGesture.zoomLogText() }
     func resetZoomLearning() { zoomGesture.resetLearning() }
