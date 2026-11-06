@@ -50,6 +50,12 @@ struct MirrorView: View {
             default: break
             }
         }
+        .onChange(of: viewModel.cameraState) { old, new in
+            viewModel.cameraStateDidChange(from: old, to: new)
+        }
+        .onChange(of: viewModel.isLightingSheetPresented) { _, presented in
+            viewModel.lightingSheetDidChange(presented)
+        }
     }
 
     private var edgeColor: Color {
