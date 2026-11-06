@@ -1,8 +1,14 @@
 import SwiftUI
 
 struct MirrorView: View {
-    @State private var viewModel = MirrorViewModel()
+    @State private var viewModel: MirrorViewModel
     @Environment(\.scenePhase) private var scenePhase
+    private let showsControls: Bool
+
+    init(session: MirrorSession, showsControls: Bool = true) {
+        _viewModel = State(initialValue: MirrorViewModel(session: session))
+        self.showsControls = showsControls
+    }
 
     var body: some View {
         ZStack {
@@ -16,32 +22,17 @@ struct MirrorView: View {
                                 softness: viewModel.detector.config.ringLightSoftness)
                     .ignoresSafeArea()
                 cameraStateOverlay
-                if GestureDebug.isEnabledGestureDebug {
-                    GestureDebugOverlay(viewModel: viewModel)
-                    GestureDebugDots(viewModel: viewModel)
-                }
-                VStack(spacing: 12) {
-                    Spacer()
-                    if viewModel.isZoomBarVisible {
-                        ZoomPartBar(selected: viewModel.selectedPart, onSelect: viewModel.select)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                if showsControls {
+                    if GestureDebug.isEnabledGestureDebug {
+                        GestureDebugOverlay(viewModel: viewModel)
+                        GestureDebugDots(viewModel: viewModel)
                     }
-                    ActionButtonRow(isZoomBarVisible: viewModel.isZoomBarVisible,
-                                    onLighting: viewModel.showLighting,
-                                    onZoom: viewModel.toggleGesture,
-                                    onMic: {})
+                    controls
+                        .transition(.opacity)
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 16)
-                .animation(.easeInOut(duration: 0.25), value: viewModel.isZoomBarVisible)
             }
         }
-        .sheet(isPresented: Bindable(viewModel).isLightingSheetPresented) {
-            LightingSheetView(lighting: viewModel.lighting)
-                .presentationDetents([.fraction(0.42)])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(.white.opacity(0.6))
-        }
+        .animation(.easeInOut, value: showsControls)
         .task { await viewModel.start() }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
@@ -56,6 +47,19 @@ struct MirrorView: View {
         .onChange(of: viewModel.isLightingSheetPresented) { _, presented in
             viewModel.lightingSheetDidChange(presented)
         }
+    }
+
+    private var controls: some View {
+        VStack {
+            Spacer()
+            CameraControls(
+                part: Binding(get: { viewModel.selectedPart }, set: viewModel.select),
+                lightMode: Binding(get: { viewModel.lightMode }, set: viewModel.setLightMode),
+                onLightLongPress: viewModel.showLighting
+            )
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
     }
 
     private var edgeColor: Color {

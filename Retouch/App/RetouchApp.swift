@@ -9,9 +9,11 @@ import SwiftUI
 
 @main
 struct RetouchApp: App {
+    @State private var session = MirrorSession()
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(session: session)
         }
     }
 }
