@@ -20,6 +20,9 @@ struct MirrorView: View {
                     GestureDebugOverlay(viewModel: viewModel)
                     GestureDebugDots(viewModel: viewModel)
                 }
+                if GestureDebug.showZoneRadius {
+                    ZoneRadiusOverlay(viewModel: viewModel)
+                }
                 VStack(spacing: 12) {
                     Spacer()
                     if viewModel.isZoomBarVisible {

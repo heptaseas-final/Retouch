@@ -699,10 +699,8 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
         }
     }
 
-    private func sendDebug(target: ZoomTarget, tip: CGPoint?, grip: CGPoint?, points: FacePoints,
-                           scan: HandScan, face: FaceObservation?, handFps: Int, now: Date) {
-        guard GestureDebug.isEnabledGestureDebug, let onDebugInfo,
-              now.timeIntervalSince(lastDebugSent) >= 0.1 else { return }
+    private func sendDebug(target: ZoomTarget, tip: CGPoint?, grip: CGPoint?, points: FacePoints, scan: HandScan, face: FaceObservation?, handFps: Int, now: Date) {
+        guard (GestureDebug.isEnabledGestureDebug || GestureDebug.showZoneRadius), let onDebugInfo, now.timeIntervalSince(lastDebugSent) >= 0.1 else { return }
         lastDebugSent = now
         func dist(_ p: CGPoint?) -> CGFloat? {
             guard let tip, let p, points.width > 0 else { return nil }
@@ -730,7 +728,43 @@ nonisolated final class ZoomGestureService: ZoomGestureServicing, @unchecked Sen
             handFps: handFps,
             gripPoint: grip,
             tipPoint: tip,
-            targetPoint: focusPoint(for: target, points)
+            targetPoint: focusPoint(for: target, points),
+            zones: zoneOverlay(points: points)
         ))
+    }
+    
+    private func zoneOverlay(points: FacePoints) -> ZoneOverlayData? {
+        guard GestureDebug.showZoneRadius,
+              let l = points.leftEye, let r = points.rightEye, points.scale > 0 else { return nil }
+        let d = points.scale
+        let W = points.width
+        // Sama persis dengan eyeReadiness
+        let triggerScale = min(CGFloat(handProfile.enterDistance / ZoomTuning.handEnterDistance), 1.1)
+
+        // Garis batas bibir: titik yang t(p) = lipsT * 0.5 (lihat EyeZones.isLipsSide)
+        var boundaryA: CGPoint?
+        var boundaryB: CGPoint?
+        let len = hypot(r.x - l.x, r.y - l.y)
+        if let lips = points.lips, len > 0 {
+            let mid = CGPoint(x: (l.x + r.x) / 2, y: (l.y + r.y) / 2)
+            let u = CGPoint(x: (r.x - l.x) / len, y: (r.y - l.y) / len)
+            let v = CGPoint(x: -u.y, y: u.x)
+            let lipsT = ((lips.x - mid.x) * v.x + (lips.y - mid.y) * v.y) / d
+            if lipsT > 0 {
+                let c = CGPoint(x: mid.x + v.x * lipsT * 0.5 * d, y: mid.y + v.y * lipsT * 0.5 * d)
+                boundaryA = CGPoint(x: c.x - u.x * d * 1.5, y: c.y - u.y * d * 1.5)
+                boundaryB = CGPoint(x: c.x + u.x * d * 1.5, y: c.y + u.y * d * 1.5)
+            }
+        }
+
+        return ZoneOverlayData(
+            leftEye: l, rightEye: r, lips: points.lips,
+            eyeTriggerRadius: ZoomTuning.eyeZoneTrigger * triggerScale * d,
+            eyeHoldRadius: ZoomTuning.eyeZoneHold * d,
+            lipsTriggerRadius: W > 0 ? CGFloat(handProfile.enterDistance) * W : nil,
+            lipsHoldRadius: W > 0 ? CGFloat(ZoomTuning.lipsHoldRadius) * W : nil,
+            lipsBoundaryA: boundaryA,
+            lipsBoundaryB: boundaryB
+        )
     }
 }

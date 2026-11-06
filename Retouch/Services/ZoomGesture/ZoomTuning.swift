@@ -99,7 +99,7 @@ nonisolated struct ZoomTuning {
     
     // MARK: - Zoom bibir satu alur
     static let lipsEnterDwell: TimeInterval = 0.5
-    static let lipsReleaseDwell: TimeInterval = 2.0
+    static let lipsReleaseDwell: TimeInterval = 1.7
     static let lipsPose2Max: CGFloat = 0.4
     static let lipsHoldRadius = handEnterDistance * 1.5
     static let lipMotionBaselineTau = 0.8
@@ -109,12 +109,12 @@ nonisolated struct ZoomTuning {
     static let lipMotionLostGrace: TimeInterval = 0.5
     
     // MARK: - Zoom mata satu alur (semua jarak dalam satuan d = jarak antar mata, FacePoints.scale)
-    static let eyeZoneTrigger: CGFloat = 0.44     // radius trigger per mata
+    static let eyeZoneTrigger: CGFloat = 0.55     // radius trigger per mata
     static let eyeZoneHold: CGFloat = 0.78        // radius tahan maksimum per mata
     static let eyeZoneDead: CGFloat = 0.09
     static let eyeFlowEnterDwell: TimeInterval = 0.5
     static let eyeFlowSwitchDwell: TimeInterval = 0.15
-    static let eyeFlowReleaseDwell: TimeInterval = 1.7
+    static let eyeFlowReleaseDwell: TimeInterval = 1.5
     static let eyeActivityEnter = 0.15
     static let eyeActivityExit = 0.07
     static let eyeTurnWidthRatio = 0.6
@@ -124,7 +124,7 @@ nonisolated struct ZoomTuning {
     static let eyeBaselineTau = 6.0             // detik, belajar baseline per mata
     static let eyeActivityMaxYaw = 25.0
     static let eyeLearnMaxYaw = 15.0
-    static let eyeUnknownCap: TimeInterval = 3.0
+    static let eyeUnknownCap: TimeInterval = 2.2
     
     // MARK: - Stabilizer tampilan zoom (hanya cara tampilan bergerak, bukan pemicu)
     static let focusDeadZone: CGFloat = 0.10
