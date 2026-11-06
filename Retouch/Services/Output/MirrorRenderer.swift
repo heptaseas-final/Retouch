@@ -70,14 +70,8 @@ final class MirrorRenderer {
             commandBuffer.commit()
             return
         }
-        var image = compose(Self.uprightMirror(frame), size: size, zoom: zoom, pointScale: pointScale)
-        if let provider = frameShift {
-            let shift = provider(size.width)
-            if shift.width != 0 || shift.height != 0 {
-                let moved = image.transformed(by: CGAffineTransform(translationX: shift.width, y: -shift.height))
-                image = moved.clampedToExtent().cropped(to: CGRect(origin: .zero, size: CGSize(width: size.width, height: size.height)))
-            }
-        }
+        let shift = frameShift?(size.width) ?? .zero
+        let image = compose(Self.uprightMirror(frame), size: size, zoom: zoom, pointScale: pointScale, shift: shift)
         
         if let makeupLook,
            let target = makeupLook.nextTarget(width: Int(size.width), height: Int(size.height)) {
@@ -112,17 +106,21 @@ final class MirrorRenderer {
         return frame.oriented(.leftMirrored)
     }
     
-    private func compose(_ frame: CIImage, size: CGSize, zoom: ZoomState, pointScale: CGFloat) -> CIImage {
+    private func compose(_ frame: CIImage, size: CGSize, zoom: ZoomState, pointScale: CGFloat, shift: CGSize) -> CIImage {
         let extent = frame.extent
         let outputRect = CGRect(origin: .zero, size: size)
         let black = CIImage(color: .black).cropped(to: outputRect)
         
         let fill = max(size.width / extent.width, size.height / extent.height)
         let total = fill * max(zoom.scale, 0.01)
-        let origin = CGPoint(x: size.width / 2 + zoom.offset.width * pointScale,
-                             y: size.height / 2 - zoom.offset.height * pointScale)
+
+        // Pan zoom + geser stabilizer jadi satu posisi, lalu dipaksa tetap di dalam frame
+        let wanted = CGPoint(x: size.width / 2 + zoom.offset.width * pointScale + shift.width,
+                             y: size.height / 2 - zoom.offset.height * pointScale - shift.height)
+        let origin = Self.keptInsideFrame(wanted, extent: extent, total: total, size: size)
+
         let center = CGPoint(x: extent.midX, y: extent.midY)
-        
+
         let visible = CGRect(x: center.x - origin.x / total, y: center.y - origin.y / total,
                              width: size.width / total, height: size.height / total)
         let source = visible.insetBy(dx: -4, dy: -4).intersection(extent)
@@ -145,5 +143,17 @@ final class MirrorRenderer {
         return image.transformed(by: CGAffineTransform(translationX: placed.x, y: placed.y))
             .composited(over: black)
             .cropped(to: outputRect)
+    }
+
+    /// tepi frame tidak boleh masuk ke area layar, jadi hitam tidak mungkin muncul.
+    private static func keptInsideFrame(_ origin: CGPoint, extent: CGRect, total: CGFloat, size: CGSize) -> CGPoint {
+        CGPoint(x: clamp(origin.x, halfSpan: extent.width * total / 2, length: size.width),
+                y: clamp(origin.y, halfSpan: extent.height * total / 2, length: size.height))
+    }
+
+    private static func clamp(_ value: CGFloat, halfSpan: CGFloat, length: CGFloat) -> CGFloat {
+        let low = length - halfSpan, high = halfSpan
+        guard low <= high else { return value }   // zoom di bawah 1: frame memang lebih kecil dari layar
+        return min(max(value, low), high)
     }
 }

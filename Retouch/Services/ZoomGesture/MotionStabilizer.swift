@@ -90,8 +90,6 @@ nonisolated final class MotionStabilizer: @unchecked Sendable {
     }
 
     // MARK: - Koreksi untuk renderer
-    /// Geseran (piksel drawable, arah layar: x ke kanan, y ke bawah) untuk frame yang sedang digambar.
-    /// Dipanggil dari MirrorRenderer.render di antrean kamera. Nol = tidak ada koreksi.
     func drawableShift(drawableWidth: CGFloat) -> CGSize {
         viewLock.lock()
         let scale = viewScale, pan = viewPan, size = viewSize
@@ -99,10 +97,8 @@ nonisolated final class MotionStabilizer: @unchecked Sendable {
         guard size.width > 0, drawableWidth > 0 else { return .zero }
 
         let c = correction(scale: scale, pan: pan, viewSize: size)   // point layar, sudah dikali zoom
-        let s = max(scale, 1)
         let toPixels = drawableWidth / size.width
-        // Geseran ini terjadi sebelum gambar diperbesar oleh zoom, jadi dibagi skala
-        return CGSize(width: c.width / s * toPixels, height: c.height / s * toPixels)
+        return CGSize(width: c.width * toPixels, height: c.height * toPixels)
     }
 
     /// Offset koreksi dalam point layar (sesudah zoom).
@@ -117,7 +113,6 @@ nonisolated final class MotionStabilizer: @unchecked Sendable {
         if let frame {
             lookup = frame.time + ZoomTuning.stabFrameBias
             if frame.hFOVDegrees > 1 {
-                // Buffer kamera landscape; setelah diputar jadi potret, sisi pendek = lebar, sisi panjang = tinggi.
                 let long = max(frame.bufferWidth, frame.bufferHeight)
                 let short = min(frame.bufferWidth, frame.bufferHeight)
                 let focalPixels = (long / 2) / tan(frame.hFOVDegrees * .pi / 360)           // piksel kamera per radian
