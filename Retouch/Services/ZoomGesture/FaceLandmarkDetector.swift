@@ -4,6 +4,7 @@
 //
 //  Created by Davin P on 25/10/26.
 //
+import QuartzCore
 import Vision
 
 /// Deteksi wajah (mata, bibir, dahi, perkiraan sudut kepala). Jalan async, frame dilewati kalau masih sibuk.
@@ -12,6 +13,7 @@ nonisolated final class FaceLandmarkDetector: @unchecked Sendable {
     private let queue = DispatchQueue(label: "zoom.face")
     private let lock = NSLock()
     private var busy = false
+    private var lastSubmit: CFTimeInterval = 0
     private var cache: FaceObservation?
 
     var latest: FaceObservation? {
@@ -22,8 +24,12 @@ nonisolated final class FaceLandmarkDetector: @unchecked Sendable {
 
     func submit(_ pixelBuffer: CVPixelBuffer) {
         lock.lock()
-        let skip = busy
-        if !skip { busy = true }
+        let now = CACurrentMediaTime()
+        let skip = busy || now - lastSubmit < VisionBudget.interval
+        if !skip {
+            busy = true
+            lastSubmit = now
+        }
         lock.unlock()
         guard !skip else { return }
 

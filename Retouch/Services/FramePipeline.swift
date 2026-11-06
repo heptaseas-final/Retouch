@@ -1,6 +1,8 @@
 import CoreImage
 import CoreVideo
 import Metal
+import QuartzCore
+import VideoToolbox
 
 
 final class FramePipeline {
@@ -11,6 +13,7 @@ final class FramePipeline {
     private let enhancer: FrameEnhancer?
     private let queue: MTLCommandQueue?
     private let fallbackColorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+    private let visionScaler = VisionDownscaler(width: 1280)
 
     init(lighting: LightingEngine) {
         let device = MTLCreateSystemDefaultDevice()
@@ -21,7 +24,7 @@ final class FramePipeline {
     }
 
     func process(_ frame: CameraFrame) {
-        vision.send(frame.pixelBuffer)
+        vision.send(visionScaler.scale(frame.pixelBuffer) ?? frame.pixelBuffer)
 
         var parameters = lighting.process(frame)
 
@@ -42,8 +45,53 @@ private extension FrameEnhancer.Parameters {
     mutating func addZoomDenoise(scale: Float) {
         let zoom = smoothstep(1.3, 2.5, scale)
         guard zoom > 0.01 else { return }
-        spatial = max(spatial, 0.4 * zoom * smoothstep(0.15, 0.6, noise))
-        edgeSharpen = max(edgeSharpen, 0.5 * zoom)
-        coring = max(coring, 0.01)
+        spatial = max(spatial, zoom * (0.3 + 0.3 * smoothstep(0.1, 0.6, noise)))
+        edgeSharpen = max(edgeSharpen, 0.3 * zoom)
+        coring = max(coring, 0.02)
+    }
+}
+
+enum VisionBudget {
+    static var interval: CFTimeInterval {
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal: 1.0 / 15
+        case .fair: 1.0 / 10
+        default: 1.0 / 6
+        }
+    }
+}
+
+private final class VisionDownscaler {
+    private let width: Int
+    private var session: VTPixelTransferSession?
+    private var pool: CVPixelBufferPool?
+    private var poolSize = (width: 0, height: 0)
+
+    init(width: Int) {
+        self.width = width
+        VTPixelTransferSessionCreate(allocator: nil, pixelTransferSessionOut: &session)
+    }
+
+    func scale(_ source: CVPixelBuffer) -> CVPixelBuffer? {
+        let sourceWidth = CVPixelBufferGetWidth(source)
+        let sourceHeight = CVPixelBufferGetHeight(source)
+        guard let session, sourceWidth > width else { return nil }
+        let height = (sourceHeight * width / sourceWidth) & ~1
+        if poolSize.width != width || poolSize.height != height {
+            let attributes: [CFString: Any] = [
+                kCVPixelBufferPixelFormatTypeKey: CVPixelBufferGetPixelFormatType(source),
+                kCVPixelBufferWidthKey: width,
+                kCVPixelBufferHeightKey: height,
+                kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary
+            ]
+            pool = nil
+            CVPixelBufferPoolCreate(nil, nil, attributes as CFDictionary, &pool)
+            poolSize = (width, height)
+        }
+        var output: CVPixelBuffer?
+        guard let pool, CVPixelBufferPoolCreatePixelBuffer(nil, pool, &output) == kCVReturnSuccess,
+              let output,
+              VTPixelTransferSessionTransferImage(session, from: source, to: output) == noErr else { return nil }
+        return output
     }
 }

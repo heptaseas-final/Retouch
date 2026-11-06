@@ -34,13 +34,16 @@ final class MakeupLook {
         return targets[targetIndex]
     }
 
-    func encode(source: MTLTexture, into destination: MTLTexture, commandBuffer: MTLCommandBuffer) -> Bool {
+    func encode(source: MTLTexture, into destination: MTLTexture, zoom: Float = 1,
+                commandBuffer: MTLCommandBuffer) -> Bool {
         guard let blit = commandBuffer.makeBlitCommandEncoder() else { return false }
         blit.generateMipmaps(for: source)
         blit.endEncoding()
 
         guard let encoder = commandBuffer.makeComputeCommandEncoder() else { return false }
-        var uniforms = SIMD3<Float>(Self.vibrance, Self.clarity, Self.clarityLevel)
+        let t = min(max((zoom - 1.2) / (2.2 - 1.2), 0), 1)
+        let clarity = Self.clarity * (1 - 0.8 * t * t * (3 - 2 * t))
+        var uniforms = SIMD3<Float>(Self.vibrance, clarity, Self.clarityLevel)
         encoder.setComputePipelineState(pipeline)
         encoder.setTexture(source, index: 0)
         encoder.setTexture(destination, index: 1)

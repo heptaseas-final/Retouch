@@ -40,6 +40,8 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
     private var isConfigured = false
     private var wantsRunning = false
     private var restartAttempts = 0
+    private var selectedFPS: Double?
+    private var isThermalCapped = false
 
 
     override init() {
@@ -53,6 +55,29 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
                            name: AVCaptureSession.interruptionEndedNotification, object: session)
         center.addObserver(self, selector: #selector(sessionRuntimeError),
                            name: AVCaptureSession.runtimeErrorNotification, object: session)
+        center.addObserver(self, selector: #selector(thermalStateDidChange),
+                           name: ProcessInfo.thermalStateDidChangeNotification, object: nil)
+    }
+
+    @objc private func thermalStateDidChange(_ notification: Notification) {
+        sessionQueue.async { self.applyThermalFrameRate() }
+    }
+
+    private func applyThermalFrameRate() {
+        guard let device, let selectedFPS else { return }
+        let state = ProcessInfo.processInfo.thermalState
+        let shouldCap = state == .serious || state == .critical
+        guard shouldCap != isThermalCapped else { return }
+        isThermalCapped = shouldCap
+        let fps = shouldCap ? min(selectedFPS, 30) : selectedFPS
+        let duration = CMTime(seconds: 1.0 / fps, preferredTimescale: 60_000)
+        withLock(device) { camera in
+            camera.activeVideoMinFrameDuration = duration
+            camera.activeVideoMaxFrameDuration = duration
+        }
+        #if DEBUG
+        print("[Camera] Thermal \(state.rawValue): fps -> \(fps)")
+        #endif
     }
 
     func start() {
@@ -307,6 +332,9 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
                 camera.activeVideoMaxFrameDuration = duration
             }
         }
+        selectedFPS = best.auto ? nil : best.fps
+        isThermalCapped = false
+        applyThermalFrameRate()
 
         #if DEBUG
         let actualDimensions = CMVideoFormatDescriptionGetDimensions(
