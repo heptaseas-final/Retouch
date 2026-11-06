@@ -57,15 +57,13 @@ final class MirrorRenderer {
         let image = compose(Self.uprightMirror(frame), size: size, zoom: zoom, pointScale: pointScale)
 
         if let makeupLook,
-           ProcessInfo.processInfo.thermalState.rawValue < ProcessInfo.ThermalState.serious.rawValue,
            let target = makeupLook.nextTarget(width: Int(size.width), height: Int(size.height)) {
             let destination = CIRenderDestination(mtlTexture: target, commandBuffer: commandBuffer)
             destination.isFlipped = true
             destination.colorSpace = colorSpace
             _ = try? context.startTask(toRender: image, to: destination)
             guard let drawable = layer.nextDrawable(),
-                  makeupLook.encode(source: target, into: drawable.texture,
-                                    zoom: Float(zoom.scale), commandBuffer: commandBuffer) else {
+                  makeupLook.encode(source: target, into: drawable.texture, commandBuffer: commandBuffer) else {
                 commandBuffer.commit()
                 return
             }

@@ -20,7 +20,6 @@ nonisolated final class HandPointDetector: @unchecked Sendable {
     private let queue = DispatchQueue(label: "zoom.hand")
     private let lock = NSLock()
     private var busy = false
-    private var lastSubmit: CFTimeInterval = 0
     private var cache = HandScan()
     private var doneCount = 0
     private var windowStart = CACurrentMediaTime()
@@ -32,10 +31,8 @@ nonisolated final class HandPointDetector: @unchecked Sendable {
     /// Frame dilewati kalau proses sebelumnya belum selesai
     func submit(_ pixelBuffer: CVPixelBuffer) {
         let skip = lock.withLock { () -> Bool in
-            let now = CACurrentMediaTime()
-            if busy || now - lastSubmit < VisionBudget.interval { return true }
+            if busy { return true }
             busy = true
-            lastSubmit = now
             return false
         }
         guard !skip else { return }
