@@ -11,12 +11,11 @@ struct MirrorView: View {
                 CameraPermissionDeniedView(onOpenSettings: viewModel.openSettings)
             } else {
                 ZoomableCameraPreview(viewModel: viewModel)
-                // Border light: saudara dari preview, bukan di dalamnya, jadi tidak ikut zoom
-                EdgeLightOverlay(level: viewModel.detector.edgeLightLevel, color: edgeColor)
+                RingLightPanels(level: viewModel.detector.ringLightLevel, color: edgeColor,
+                                maxSideFraction: CGFloat(viewModel.detector.config.ringLightWidth),
+                                softness: viewModel.detector.config.ringLightSoftness)
                     .ignoresSafeArea()
-                    .animation(.easeInOut(duration: 0.25), value: viewModel.detector.edgeLightLevel)
                 cameraStateOverlay
-//                luxLabel
                 if GestureDebug.isEnabledGestureDebug {
                     GestureDebugOverlay(viewModel: viewModel)
                     GestureDebugDots(viewModel: viewModel)
@@ -51,33 +50,20 @@ struct MirrorView: View {
             default: break
             }
         }
+        .onChange(of: viewModel.cameraState) { old, new in
+            viewModel.cameraStateDidChange(from: old, to: new)
+        }
+        .onChange(of: viewModel.isLightingSheetPresented) { _, presented in
+            viewModel.lightingSheetDidChange(presented)
+        }
     }
 
-    /// Warna border sesuai pilihan di sheet; putih kalau belum memilih.
     private var edgeColor: Color {
         switch viewModel.detector.filterColor {
         case .warm: Color(hex: 0xFFECBB)
         case .cool: Color(hex: 0xD7F8FF)
         default: .white
         }
-    }
-
-    private var luxLabel: some View {
-        VStack {
-            HStack {
-                Spacer()
-                Text(viewModel.luxText)
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.black.opacity(0.5), in: Capsule())
-            }
-            Spacer()
-        }
-        .padding(.top, 8)
-        .padding(.trailing, 16)
-        .allowsHitTesting(false)
     }
 
     @ViewBuilder

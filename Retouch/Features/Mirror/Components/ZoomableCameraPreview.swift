@@ -1,9 +1,3 @@
-//
-//  ZoomableCameraPreview.swift
-//  Retouch
-//
-//  Created by Davin P on 25/10/26.
-//
 import SwiftUI
 
 struct ZoomableCameraPreview: View {
@@ -11,10 +5,8 @@ struct ZoomableCameraPreview: View {
 
     var body: some View {
         GeometryReader { geo in
-            MirrorPreview(detector: viewModel.detector)
+            MirrorPreview(detector: viewModel.detector, zoom: viewModel.zoomState)
                 .frame(width: geo.size.width, height: geo.size.height)
-                .scaleEffect(viewModel.zoomState.scale)
-                .offset(viewModel.zoomState.offset)
                 .onAppear { viewModel.setViewSize(geo.size) }
                 .onChange(of: geo.size) { _, size in viewModel.setViewSize(size) }
         }

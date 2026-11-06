@@ -1,46 +1,42 @@
-//
-//  CameraSessionManager.swift
-//  Retouch
-//
-//  Created by Davin P on 26/10/26.
-//
-
 import AVFoundation
+import ImageIO
 
-struct LightSample {
-    var iso: Double
-    var exposureDuration: Double
-    var aperture: Double
-    var exposureTargetOffset: Double
-    var current: WhiteBalance?
-    var grayWorld: WhiteBalance?
+struct CameraFrame {
+    let pixelBuffer: CVPixelBuffer
+    let time: Double
+    let exposureDuration: Double
+    let iso: Float
+    let exposureTargetOffset: Float
+}
+
+struct CameraExposureRange {
+    var minISO: Float
+    var maxISO: Float
+    var aperture: Float
 }
 
 final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     let session = AVCaptureSession()
-    var onLightSample: ((LightSample) -> Void)?
-    var onFrame: ((CVPixelBuffer) -> Void)?
+    var onFrame: ((CameraFrame) -> Void)?
     var onStateChange: ((CameraState) -> Void)?
-    var sampleInterval: CFTimeInterval = 0.1
     var frameRate: Int32 = 60
-    var whiteBalanceGlide: Double = 0.35
+    var prefersAutoFrameRate = false
+    var preferredWidth: Int32 = 3840
     var maxRestartAttempts = 3
-    var preferredStabilization: AVCaptureVideoStabilizationMode = .cinematicExtendedEnhanced
-
+    var preferredStabilization: AVCaptureVideoStabilizationMode = .off
+    
     private let sessionQueue = DispatchQueue(label: "autolight.camera.session")
     private let analysisQueue = DispatchQueue(label: "autolight.camera.analysis", qos: .userInitiated)
     private var device: AVCaptureDevice?
     private var videoConnection: AVCaptureConnection?
     private var lastSampleTime: CFTimeInterval = 0
-
+    private var activeFOV: Double = 0
+    
     private var isConfigured = false
     private var wantsRunning = false
     private var restartAttempts = 0
-
-    private var appliedGains: AVCaptureDevice.WhiteBalanceGains?
-    private var targetGains: AVCaptureDevice.WhiteBalanceGains?
-    private var lastGlideTime: CFTimeInterval = 0
-
+    
+    
     override init() {
         super.init()
         let center = NotificationCenter.default
@@ -53,7 +49,7 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
         center.addObserver(self, selector: #selector(sessionRuntimeError),
                            name: AVCaptureSession.runtimeErrorNotification, object: session)
     }
-
+    
     func start() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
@@ -71,7 +67,7 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
             report(.permissionDenied)
         }
     }
-
+    
     func stop(reportAs state: CameraState = .idle) {
         sessionQueue.async {
             self.wantsRunning = false
@@ -79,7 +75,7 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
             self.report(state)
         }
     }
-
+    
     func retry() {
         sessionQueue.async {
             self.session.beginConfiguration()
@@ -90,7 +86,7 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
         }
         start()
     }
-
+    
     private func configureAndRun() {
         wantsRunning = true
         restartAttempts = 0
@@ -100,21 +96,38 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
             isConfigured = true
         }
         if !session.isRunning { session.startRunning() }
-        updateStabilizationState()
         report(session.isRunning ? .running : .failed)
     }
-
+    
+    private func configureColorAndExposure(_ device: AVCaptureDevice){
+        withLock(device) { device in
+            if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                device.whiteBalanceMode = .continuousAutoWhiteBalance
+            }
+            
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+            }
+        }
+    }
+    
     private func configure() -> Bool {
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front),
               let input = try? AVCaptureDeviceInput(device: device) else { return false }
-
+        
         session.beginConfiguration()
         defer { session.commitConfiguration() }
-        session.sessionPreset = .high
-
+        
+        if session.canSetSessionPreset(.inputPriority) {
+            session.sessionPreset = .inputPriority
+        } else {
+            session.sessionPreset = .high
+        }
+        session.automaticallyConfiguresCaptureDeviceForWideColor = false
+        
         guard session.canAddInput(input) else { return false }
         session.addInput(input)
-
+        
         let output = AVCaptureVideoDataOutput()
         output.alwaysDiscardsLateVideoFrames = true
         output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
@@ -122,26 +135,49 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
         guard session.canAddOutput(output) else { return false }
         session.addOutput(output)
         enableStabilization(output.connection(with: .video), device)
-
+        
         lockFrameRate(device)
+        activeFOV = Double(device.activeFormat.videoFieldOfView)
+        configureFocus(device)
+        configureColorAndExposure(device)
+        
         self.device = device
+        
+        setAutoExposure()
+        setAutoWhiteBalance()
+        
         return true
     }
-
+    
+    private func configureFocus(_ device: AVCaptureDevice) {
+        withLock(device) { d in
+            if d.isFocusModeSupported(.continuousAutoFocus) { d.focusMode = .continuousAutoFocus }
+            if d.isAutoFocusRangeRestrictionSupported { d.autoFocusRangeRestriction = .none }
+            if d.isSmoothAutoFocusSupported { d.isSmoothAutoFocusEnabled = false }
+            if d.isFocusPointOfInterestSupported { d.focusPointOfInterest = CGPoint(x: 0.5, y: 0.5) }
+            d.automaticallyAdjustsFaceDrivenAutoFocusEnabled = false
+            d.isFaceDrivenAutoFocusEnabled = true
+            d.automaticallyAdjustsFaceDrivenAutoExposureEnabled = false
+            d.isFaceDrivenAutoExposureEnabled = true
+        }
+        enableVideoHDR(device)
+    }
+    
+    private func enableVideoHDR(_ device: AVCaptureDevice) {
+        guard device.activeFormat.isVideoHDRSupported else { return }
+        withLock(device) { d in
+            d.automaticallyAdjustsVideoHDREnabled = false
+            d.isVideoHDREnabled = true
+        }
+    }
+    
     private func enableStabilization(_ connection: AVCaptureConnection?, _ device: AVCaptureDevice) {
         videoConnection = connection
         guard let connection, connection.isVideoStabilizationSupported,
               device.activeFormat.isVideoStabilizationModeSupported(preferredStabilization) else { return }
         connection.preferredVideoStabilizationMode = preferredStabilization
     }
-
-    private func updateStabilizationState() {
-        #if DEBUG
-        let active = videoConnection?.activeVideoStabilizationMode ?? .off
-        print("[Camera] stabilization preferred=\(Self.name(preferredStabilization)) active=\(Self.name(active))")
-        #endif
-    }
-
+    
     private static func name(_ mode: AVCaptureVideoStabilizationMode) -> String {
         switch mode {
         case .off: "off"
@@ -155,41 +191,154 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
         @unknown default: "unknown(\(mode.rawValue))"
         }
     }
-
+    
     private func lockFrameRate(_ device: AVCaptureDevice) {
-        let currentWidth = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription).width
-        var best: (format: AVCaptureDevice.Format, fps: Double, widthGap: Int32)?
+        let targetFPS = min(max(Double(frameRate), 30), 60)
+        let minimumFPS = 29.0
+        
+        var best: (
+            format: AVCaptureDevice.Format,
+            fps: Double,
+            pixelCount: Int64,
+            isBinned: Bool,
+            hdr: Bool,
+            p3: Bool,
+            auto: Bool
+        )?
+        
         for format in device.formats {
-            let width = CMVideoFormatDescriptionGetDimensions(format.formatDescription).width
-            guard width >= 1280 else { continue }
-            let maxFps = format.videoSupportedFrameRateRanges.map(\.maxFrameRate).max() ?? 0
-            let fps = min(maxFps, Double(frameRate))
-            let gap = abs(width - currentWidth)
-            if fps > (best?.fps ?? 0) || (fps == best?.fps && gap < (best?.widthGap ?? .max)) {
-                best = (format, fps, gap)
+            let dimensions = CMVideoFormatDescriptionGetDimensions(
+                format.formatDescription
+            )
+            
+            let width = dimensions.width
+            let height = dimensions.height
+            
+            guard width >= 1280,
+                  width <= preferredWidth else {
+                continue
+            }
+            
+            let supportedFPS = format.videoSupportedFrameRateRanges
+                .compactMap { range -> Double? in
+                    let fps = min(range.maxFrameRate, targetFPS)
+                    
+                    guard fps >= minimumFPS,
+                          fps >= range.minFrameRate else {
+                        return nil
+                    }
+                    
+                    return fps
+                }
+                .max()
+            
+            guard let fps = supportedFPS else {
+                continue
+            }
+            
+            let pixelCount = Int64(width) * Int64(height)
+            let auto = prefersAutoFrameRate && format.isAutoVideoFrameRateSupported
+            
+            let candidate = (
+                format: format,
+                fps: fps,
+                pixelCount: pixelCount,
+                isBinned: format.isVideoBinned,
+                hdr: format.isVideoHDRSupported,
+                p3: format.supportedColorSpaces.contains(.P3_D65),
+                auto: auto
+            )
+            
+            let better: Bool
+            
+            if let current = best {
+                if candidate.pixelCount != current.pixelCount {
+                    better = candidate.pixelCount > current.pixelCount
+                }
+                else if candidate.fps != current.fps {
+                    better = candidate.fps > current.fps
+                }
+                else if candidate.hdr != current.hdr {
+                    better = candidate.hdr
+                }
+                else if candidate.p3 != current.p3 {
+                    better = candidate.p3
+                }
+                else if candidate.isBinned != current.isBinned {
+                    better = !candidate.isBinned
+                }
+                else {
+                    better = candidate.auto && !current.auto
+                }
+            } else {
+                better = true
+            }
+            
+            if better {
+                best = candidate
             }
         }
-        guard let best else { return }
-        let duration = CMTime(value: 1, timescale: Int32(best.fps))
-        withLock(device) {
-            $0.activeFormat = best.format
-            $0.activeVideoMinFrameDuration = duration
-            $0.activeVideoMaxFrameDuration = duration
+        
+        guard let best else {
+#if DEBUG
+            print("[Camera] No format supports the requested 30–60 FPS range.")
+#endif
+            return
         }
+        
+        let duration = CMTime(
+            seconds: 1.0 / best.fps,
+            preferredTimescale: 60_000
+        )
+        
+        withLock(device) { camera in
+            camera.activeFormat = best.format
+            camera.activeColorSpace = best.p3 ? .P3_D65 : .sRGB
+            
+            if best.auto {
+                camera.isAutoVideoFrameRateEnabled = true
+            } else {
+                camera.isAutoVideoFrameRateEnabled = false
+                camera.activeVideoMinFrameDuration = duration
+                camera.activeVideoMaxFrameDuration = duration
+            }
+        }
+        
+#if DEBUG
+        let actualDimensions = CMVideoFormatDescriptionGetDimensions(
+            device.activeFormat.formatDescription
+        )
+        
+        let actualDuration = device.activeVideoMaxFrameDuration
+        let actualFPS = actualDuration.seconds > 0
+        ? 1.0 / actualDuration.seconds
+        : 0
+        
+        print("""
+        [Camera] Selected format:
+          Resolution: \(actualDimensions.width)x\(actualDimensions.height)
+          Target FPS: \(best.fps)
+          Active FPS limit: \(String(format: "%.2f", actualFPS))
+          Binned: \(device.activeFormat.isVideoBinned)
+          Auto FPS: \(best.auto)
+          Video HDR supported: \(best.hdr)
+          Color space: \(device.activeColorSpace == .P3_D65 ? "P3" : "sRGB")
+        """)
+#endif
     }
-
+    
     private func report(_ state: CameraState) {
         DispatchQueue.main.async { self.onStateChange?(state) }
     }
-
+    
     @objc private func sessionDidStart(_ notification: Notification) {
         sessionQueue.async { if self.wantsRunning { self.report(.running) } }
     }
-
+    
     @objc private func sessionWasInterrupted(_ notification: Notification) {
         sessionQueue.async { if self.wantsRunning { self.report(.reconnecting) } }
     }
-
+    
     @objc private func sessionInterruptionEnded(_ notification: Notification) {
         sessionQueue.async {
             guard self.wantsRunning else { return }
@@ -197,7 +346,7 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
             self.report(self.session.isRunning ? .running : .reconnecting)
         }
     }
-
+    
     @objc private func sessionRuntimeError(_ notification: Notification) {
         sessionQueue.async {
             guard self.wantsRunning else { return }
@@ -205,7 +354,7 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
             self.restartAfterError()
         }
     }
-
+    
     private func restartAfterError() {
         guard wantsRunning else { return }
         guard restartAttempts < maxRestartAttempts else { report(.failed); return }
@@ -221,62 +370,30 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
             }
         }
     }
-
-    func useAutoWhiteBalance() {
-        analysisQueue.async {
-            self.targetGains = nil
-            self.appliedGains = nil
-            guard let device = self.device,
-                  device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) else { return }
-            self.withLock(device) { $0.whiteBalanceMode = .continuousAutoWhiteBalance }
-        }
+    
+    func setAutoExposure() {
+        guard let device, device.isExposureModeSupported(.continuousAutoExposure) else { return }
+        withLock(device) { $0.exposureMode = .continuousAutoExposure }
     }
-
-    func glideWhiteBalance(to target: WhiteBalance) {
-        analysisQueue.async {
-            guard let device = self.device, device.isLockingWhiteBalanceWithCustomDeviceGainsSupported else { return }
-            let values = AVCaptureDevice.WhiteBalanceTemperatureAndTintValues(
-                temperature: Float(target.temperature), tint: Float(target.tint))
-            self.targetGains = Self.clamp(device.deviceWhiteBalanceGains(for: values), device)
-            if self.appliedGains == nil {
-                self.appliedGains = device.deviceWhiteBalanceGains
-                self.lastGlideTime = CACurrentMediaTime()
-            }
-        }
+    
+    func setAutoWhiteBalance() {
+        guard let device, device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) else { return }
+        withLock(device) { $0.whiteBalanceMode = .continuousAutoWhiteBalance }
     }
-
-    private func stepWhiteBalanceGlide(_ device: AVCaptureDevice) {
-        guard let target = targetGains, var gains = appliedGains else { return }
-        let now = CACurrentMediaTime()
-        let k = Float(1 - exp(-(now - lastGlideTime) / whiteBalanceGlide))
-        lastGlideTime = now
-
-        gains.redGain += (target.redGain - gains.redGain) * k
-        gains.greenGain += (target.greenGain - gains.greenGain) * k
-        gains.blueGain += (target.blueGain - gains.blueGain) * k
-        let remaining = max(abs(target.redGain - gains.redGain),
-                            abs(target.greenGain - gains.greenGain),
-                            abs(target.blueGain - gains.blueGain))
-        let finished = remaining < 0.002
-        if finished { gains = target }
-
-        if !finished, let applied = appliedGains,
-           max(abs(gains.redGain - applied.redGain), abs(gains.blueGain - applied.blueGain)) < 0.001 {
-            return
-        }
-        appliedGains = gains
-        if finished { targetGains = nil }
-        let clamped = Self.clamp(gains, device)
-        withLock(device) { $0.setWhiteBalanceModeLocked(with: clamped, completionHandler: nil) }
+    
+    func setExposureBias(_ ev: Float) {
+        guard let device else { return }
+        let bias = min(max(ev, device.minExposureTargetBias), device.maxExposureTargetBias)
+        guard abs(device.exposureTargetBias - bias) > 0.01 else { return }
+        withLock(device) { $0.setExposureTargetBias(bias, completionHandler: nil) }
     }
-
-    private static func clamp(_ gains: AVCaptureDevice.WhiteBalanceGains,
-                              _ device: AVCaptureDevice) -> AVCaptureDevice.WhiteBalanceGains {
-        let maxGain = device.maxWhiteBalanceGain
-        func c(_ g: Float) -> Float { min(max(g, 1), maxGain) }
-        return .init(redGain: c(gains.redGain), greenGain: c(gains.greenGain), blueGain: c(gains.blueGain))
+    
+    func exposureRange() -> CameraExposureRange? {
+        guard let device else { return nil }
+        let format = device.activeFormat
+        return CameraExposureRange(minISO: format.minISO, maxISO: format.maxISO, aperture: device.lensAperture)
     }
-
+    
     private func withLock(_ device: AVCaptureDevice, _ body: (AVCaptureDevice) -> Void) {
         do {
             try device.lockForConfiguration()
@@ -286,31 +403,62 @@ final class CameraSessionManager: NSObject, AVCaptureVideoDataOutputSampleBuffer
             //print("Camera configuration failed: \(error)")
         }
     }
-
+    
+    //    func captureOutput(_ output: AVCaptureOutput,
+    //                       didOutput sampleBuffer: CMSampleBuffer,
+    //                       from connection: AVCaptureConnection) {
+    //        guard let device else { return }
+    //        stepWhiteBalanceGlide(device)
+    //        if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+    //            FrameClock.shared.note(frameTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds,
+    //                                   bufferWidth: Double(CVPixelBufferGetWidth(pixelBuffer)),
+    //                                   bufferHeight: Double(CVPixelBufferGetHeight(pixelBuffer)),
+    //                                   hFOVDegrees: activeFOV)
+    //            onFrame?(pixelBuffer)
+    //        }
+    //
+    //        let now = CACurrentMediaTime()
+    //        guard now - lastSampleTime >= sampleInterval else { return }
+    //        lastSampleTime = now
+    //
+    //        let sample = LightSample(iso: Double(device.iso),
+    //                                 exposureDuration: device.exposureDuration.seconds,
+    //                                 aperture: Double(device.lensAperture),
+    //                                 exposureTargetOffset: Double(device.exposureTargetOffset),
+    //                                 current: Self.whiteBalance(device.deviceWhiteBalanceGains, device),
+    //                                 grayWorld: Self.whiteBalance(device.grayWorldDeviceWhiteBalanceGains, device))
+    //        DispatchQueue.main.async { self.onLightSample?(sample) }
+    //        guard let device, let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+    //        let time = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+    //        let exposure = Self.exposure(of: sampleBuffer) ?? (device.exposureDuration.seconds, device.iso)
+    //        onFrame?(CameraFrame(pixelBuffer: pixelBuffer, time: time,
+    //                             exposureDuration: exposure.duration, iso: exposure.iso,
+    //                             exposureTargetOffset: device.exposureTargetOffset))
+    //    }
+    
     func captureOutput(_ output: AVCaptureOutput,
                        didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
-        guard let device else { return }
-        stepWhiteBalanceGlide(device)
-        if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) { onFrame?(pixelBuffer) }
-
-        let now = CACurrentMediaTime()
-        guard now - lastSampleTime >= sampleInterval else { return }
-        lastSampleTime = now
-
-        let sample = LightSample(iso: Double(device.iso),
-                                 exposureDuration: device.exposureDuration.seconds,
-                                 aperture: Double(device.lensAperture),
-                                 exposureTargetOffset: Double(device.exposureTargetOffset),
-                                 current: Self.whiteBalance(device.deviceWhiteBalanceGains, device),
-                                 grayWorld: Self.whiteBalance(device.grayWorldDeviceWhiteBalanceGains, device))
-        DispatchQueue.main.async { self.onLightSample?(sample) }
+        guard let device, let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        let time = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+        
+        FrameClock.shared.note(frameTime: time,
+                               bufferWidth: Double(CVPixelBufferGetWidth(pixelBuffer)),
+                               bufferHeight: Double(CVPixelBufferGetHeight(pixelBuffer)),
+                               hFOVDegrees: activeFOV)
+        
+        let exposure = Self.exposure(of: sampleBuffer) ?? (device.exposureDuration.seconds, device.iso)
+        onFrame?(CameraFrame(pixelBuffer: pixelBuffer, time: time,
+                             exposureDuration: exposure.duration, iso: exposure.iso,
+                             exposureTargetOffset: device.exposureTargetOffset))
     }
-
-    private static func whiteBalance(_ gains: AVCaptureDevice.WhiteBalanceGains,
-                                     _ device: AVCaptureDevice) -> WhiteBalance? {
-        guard gains.redGain >= 1, gains.greenGain >= 1, gains.blueGain >= 1 else { return nil }
-        let values = device.temperatureAndTintValues(for: clamp(gains, device))
-        return WhiteBalance(temperature: Double(values.temperature), tint: Double(values.tint))
+    
+    private static func exposure(of sampleBuffer: CMSampleBuffer) -> (duration: Double, iso: Float)? {
+        guard let exif = CMGetAttachment(sampleBuffer, key: kCGImagePropertyExifDictionary,
+                                         attachmentModeOut: nil) as? [String: Any],
+              let duration = (exif[kCGImagePropertyExifExposureTime as String] as? NSNumber)?.doubleValue,
+              let iso = (exif[kCGImagePropertyExifISOSpeedRatings as String] as? [NSNumber])?.first?.floatValue,
+              duration > 0, iso > 0 else { return nil }
+        return (duration, iso)
     }
 }
