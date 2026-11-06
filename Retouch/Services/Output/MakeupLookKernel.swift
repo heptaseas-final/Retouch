@@ -111,14 +111,17 @@ final class MakeupLook {
         float C = length(lab.yz);
         float hue = atan2(lab.z, lab.y);                       
 
-        // 1. Bobot kulit: hue dekat 42° (±15° penuh, hilang di ±25°) dan chroma rendah-sedang.
-        float d = abs(hue - 0.733);
+        // 1. Bobot kulit: hue dekat 52° (±25° penuh, hilang di ±35°) dan chroma rendah-sedang.
+        //    Rentang 27–77° mencakup kulit pinkish, Asia, kuning langsat, sawo matang, olive,
+        //    dan kulit di bawah lampu warm. Chroma ≤ 0.11 (hilang di 0.15) = kepekatan kulit.
+        float d = abs(hue - 0.908);
         d = min(d, 6.2831853 - d);
-        float skinHue = 1.0 - smoothstep(0.262, 0.436, d);
-        float skin = skinHue * (1.0 - smoothstep(0.10, 0.13, C));
+        float skinHue = 1.0 - smoothstep(0.436, 0.611, d);
+        float skin = skinHue * (1.0 - smoothstep(0.11, 0.15, C));
 
-        // 2. Boost chroma: makeup penuh, kulit seperempat; warna pekat & abu-abu tidak ditambah.
-        float boost = 1.0 + vibrance * mix(1.0, 0.25, skin);
+        // 2. Boost chroma: makeup penuh, kulit tidak diubah (supaya wajah tidak menguning);
+        //    warna yang sudah pekat & abu-abu juga tidak ditambah.
+        float boost = 1.0 + vibrance * (1.0 - skin);
         boost = mix(boost, 1.0, smoothstep(0.22, 0.32, C));
         boost = mix(1.0, boost, smoothstep(0.005, 0.02, C));
         lab.yz *= boost;
